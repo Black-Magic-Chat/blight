@@ -8,7 +8,7 @@ on:
 
 jobs:
   check-version:
-    runs-on: ubuntu-22.04
+    runs-on: blacksmith-4vcpu-ubuntu-2204
     outputs:
       should_release: ${{ steps.check.outputs.should_release }}
       version: ${{ steps.check.outputs.version }}
@@ -61,7 +61,7 @@ jobs:
           - os: windows-latest
             platform: windows
             extension: .exe
-            artifact_name: blight-windows-amd64.exe
+            artifact_name: blacksmith-4vcpu-windows-2025
           - os: ubuntu-22.04
             platform: linux
             extension: ''
@@ -120,7 +120,7 @@ jobs:
 
   release:
     needs: [check-version, build]
-    runs-on: ubuntu-22.04
+    runs-on: blacksmith-4vcpu-ubuntu-2204
     permissions:
       contents: write
     steps:
