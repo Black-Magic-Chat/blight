@@ -157,7 +157,7 @@ func extractIconHQ(path string) string {
 	// Get the extra-large (48x48) system image list
 	var imageList uintptr
 	hr, _, _ := procSHGetImageList.Call(
-		SHIL_EXTRALARGE,
+		SHIL_JUMBO,
 		uintptr(unsafe.Pointer(&IID_IImageList)),
 		uintptr(unsafe.Pointer(&imageList)),
 	)
