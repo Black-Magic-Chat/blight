@@ -83,18 +83,18 @@ jobs:
         working-directory: frontend
         run: pnpm install
 
-      - name: Build
-        run: wails build -ldflags "-X main.Version=${{ needs.check-version.outputs.version }}"
+      - name: Build installer
+        run: wails build -nsis -ldflags "-X main.Version=${{ needs.check-version.outputs.version }}"
 
-      - name: Rename artifact
+      - name: Rename installer
         shell: bash
-        run: cp build/bin/blight.exe blight-windows-amd64.exe
+        run: cp build/bin/blight-amd64-installer.exe blight-windows-amd64-setup.exe
 
-      - name: Upload artifact
+      - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: blight-windows-amd64
-          path: blight-windows-amd64.exe
+          name: blight-windows-amd64-setup
+          path: blight-windows-amd64-setup.exe
 
   release:
     needs: [check-version, build]
@@ -156,10 +156,12 @@ jobs:
 
             | Platform | File |
             |----------|------|
-            | Windows (x64) | `blight-windows-amd64.exe` |
+            | Windows (x64) | `blight-windows-amd64-setup.exe` |
+
+            > **Installation**: Run the setup file. blight installs to your user directory (no admin/UAC required) and adds itself to Windows startup automatically.
 
             ---
 
             *Built from `${{ github.ref_name }}` branch at `${{ github.sha }}`*
           files: |
-            artifacts/blight-windows-amd64/*
+            artifacts/blight-windows-amd64-setup/*
