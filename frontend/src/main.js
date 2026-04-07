@@ -81,12 +81,12 @@ class Blight {
     }
 
     async installUpdate(update) {
-        if (!confirm(`Install update ${update.version}? The app will restart.`)) return;
+        if (!confirm(`Install update ${update.version}?\nThe installer will close and restart blight automatically.`)) return;
 
         this.showToast('Downloading update…', 'Please wait');
         const res = await InstallUpdate();
         if (res === 'success') {
-            this.showToast('Restarting…', 'Update applied successfully');
+            this.showToast('Installing…', 'blight will restart shortly');
         } else {
             this.showToast('Update failed', res);
         }
