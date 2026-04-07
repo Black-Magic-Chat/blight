@@ -25,6 +25,13 @@ func main() {
 	defer log.Close()
 	defer log.RecoverPanic("main")
 
+	// Settings window mode — launched by the tray or keyboard shortcut.
+	// Runs as a proper non-frameless window, no hotkey, no tray icon.
+	if len(os.Args) > 1 && os.Args[1] == "--settings" {
+		runSettingsWindow(log)
+		return
+	}
+
 	log.Info("blight starting up", map[string]interface{}{"version": Version})
 
 	if !log.Enabled() {
@@ -48,7 +55,6 @@ func main() {
 		}
 	}
 
-	// Start debug console server (only if not production)
 	if log.Enabled() {
 		port, err := debug.StartConsole(log)
 		if err != nil {
@@ -94,4 +100,39 @@ func main() {
 	}
 
 	log.Info("blight shutting down gracefully")
+}
+
+func runSettingsWindow(log *debug.Logger) {
+	log.Info("running in settings-window mode")
+
+	app := NewSettingsApp(Version)
+
+	err := wails.Run(&options.App{
+		Title:         "blight Settings",
+		Width:         680,
+		Height:        560,
+		DisableResize: false,
+		MinWidth:      480,
+		MinHeight:     400,
+		Frameless:     false,
+		AlwaysOnTop:   false,
+		StartHidden:   false,
+		AssetServer: &assetserver.Options{
+			Assets: assets,
+		},
+		OnStartup:  app.startup,
+		OnShutdown: app.settingsShutdown,
+		Bind: []interface{}{
+			app,
+		},
+		Windows: &windows.Options{
+			WebviewIsTransparent: false,
+			WindowIsTranslucent:  false,
+			Theme:                windows.Dark,
+		},
+	})
+
+	if err != nil {
+		log.Fatal("settings wails.Run failed", map[string]interface{}{"error": err.Error()})
+	}
 }

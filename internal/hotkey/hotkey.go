@@ -3,6 +3,7 @@ package hotkey
 import (
 	"blight/internal/debug"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -25,9 +26,109 @@ const (
 	WM_SYSKEYDOWN  = 0x0104
 	WM_SYSKEYUP    = 0x0105
 
-	VK_SPACE = 0x20
-	VK_MENU  = 0x12 // Alt key
+	// Virtual key codes
+	VK_SPACE   = 0x20
+	VK_MENU    = 0x12 // Alt
+	VK_CONTROL = 0x11 // Ctrl
+	VK_SHIFT   = 0x10 // Shift
+	VK_LWIN    = 0x5B // Left Win
+	VK_RWIN    = 0x5C // Right Win
+	VK_TAB     = 0x09
+	VK_RETURN  = 0x0D
+	VK_BACK    = 0x08
+	VK_DELETE  = 0x2E
+	VK_ESCAPE  = 0x1B
+	VK_F1      = 0x70
+	VK_F12     = 0x7B
 )
+
+// HotkeyConfig holds the parsed key and modifier VK codes for a hotkey.
+type HotkeyConfig struct {
+	Key          uint32
+	Modifiers    []uint32
+	NeedsAltHook bool // true if Alt is one of the modifiers (uses WM_SYSKEYDOWN)
+}
+
+// ParseHotkey parses a string like "Alt+Space", "Ctrl+Alt+Space", "Win+Space".
+// Returns a zero config (Key=0) if parsing fails.
+func ParseHotkey(s string) HotkeyConfig {
+	parts := strings.Split(s, "+")
+	var cfg HotkeyConfig
+
+	for _, part := range parts {
+		p := strings.TrimSpace(part)
+		switch strings.ToLower(p) {
+		case "alt":
+			cfg.Modifiers = append(cfg.Modifiers, VK_MENU)
+			cfg.NeedsAltHook = true
+		case "ctrl", "control":
+			cfg.Modifiers = append(cfg.Modifiers, VK_CONTROL)
+		case "shift":
+			cfg.Modifiers = append(cfg.Modifiers, VK_SHIFT)
+		case "win", "windows", "super":
+			cfg.Modifiers = append(cfg.Modifiers, VK_LWIN)
+		default:
+			cfg.Key = parseKeyName(p)
+		}
+	}
+
+	// Default to Alt+Space if parsing produced no key
+	if cfg.Key == 0 {
+		cfg.Key = VK_SPACE
+		cfg.Modifiers = []uint32{VK_MENU}
+		cfg.NeedsAltHook = true
+	}
+
+	return cfg
+}
+
+func parseKeyName(s string) uint32 {
+	switch strings.ToLower(s) {
+	case "space":
+		return VK_SPACE
+	case "tab":
+		return VK_TAB
+	case "enter", "return":
+		return VK_RETURN
+	case "backspace":
+		return VK_BACK
+	case "delete", "del":
+		return VK_DELETE
+	case "escape", "esc":
+		return VK_ESCAPE
+	}
+
+	// F1–F12
+	if len(s) >= 2 && (s[0] == 'f' || s[0] == 'F') {
+		n := uint32(0)
+		for _, c := range s[1:] {
+			if c < '0' || c > '9' {
+				n = 0
+				break
+			}
+			n = n*10 + uint32(c-'0')
+		}
+		if n >= 1 && n <= 12 {
+			return VK_F1 + n - 1
+		}
+	}
+
+	// Single letter A–Z (VK code == ASCII uppercase)
+	if len(s) == 1 {
+		c := s[0]
+		if c >= 'a' && c <= 'z' {
+			return uint32(c - 32) // uppercase
+		}
+		if c >= 'A' && c <= 'Z' {
+			return uint32(c)
+		}
+		if c >= '0' && c <= '9' {
+			return uint32(c)
+		}
+	}
+
+	return 0
+}
 
 // KBDLLHOOKSTRUCT contains info about a low-level keyboard event.
 type KBDLLHOOKSTRUCT struct {
@@ -49,14 +150,16 @@ type MSG struct {
 
 type HotkeyManager struct {
 	callback   func()
+	config     HotkeyConfig
 	quit       chan struct{}
 	hookHandle uintptr
 	altPressed atomic.Bool
 }
 
-func New(callback func()) *HotkeyManager {
+func New(hotkeyStr string, callback func()) *HotkeyManager {
 	return &HotkeyManager{
 		callback: callback,
+		config:   ParseHotkey(hotkeyStr),
 		quit:     make(chan struct{}),
 	}
 }
@@ -70,6 +173,16 @@ func (h *HotkeyManager) Stop() {
 	close(h.quit)
 }
 
+func (h *HotkeyManager) allModsPressed() bool {
+	for _, mod := range h.config.Modifiers {
+		state, _, _ := procGetAsyncKeyState.Call(uintptr(mod))
+		if state&0x8000 == 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func (h *HotkeyManager) listen() {
 	log := debug.Get()
 
@@ -77,31 +190,26 @@ func (h *HotkeyManager) listen() {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	log.Info("hotkey: installing low-level keyboard hook for Alt+Space")
+	log.Info("hotkey: installing keyboard hook", map[string]interface{}{
+		"key":       h.config.Key,
+		"modifiers": h.config.Modifiers,
+	})
 
-	// Create the hook callback
 	hookCallback := func(nCode int, wParam uintptr, lParam uintptr) uintptr {
 		if nCode >= 0 {
 			kbData := (*KBDLLHOOKSTRUCT)(unsafe.Pointer(lParam))
 
-			switch wParam {
-			case WM_SYSKEYDOWN:
-				if kbData.VkCode == VK_SPACE {
-					// Check if Alt is held down
-					altState, _, _ := procGetAsyncKeyState.Call(VK_MENU)
-					if altState&0x8000 != 0 {
-						log.Info("hotkey: Alt+Space pressed")
-						// Run callback in a separate goroutine to avoid blocking the hook
-						go h.callback()
-						// Return 1 to consume this keypress — prevents Windows from
-						// showing the system menu
-						return 1
-					}
+			// Accept both KEYDOWN and SYSKEYDOWN so Alt+X combos work
+			if wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN {
+				if kbData.VkCode == h.config.Key && h.allModsPressed() {
+					log.Info("hotkey: triggered")
+					go h.callback()
+					// Consume the event — prevents OS from acting on it (e.g. Alt opens menus)
+					return 1
 				}
 			}
 		}
 
-		// Pass to next hook in the chain
 		ret, _, _ := procCallNextHookEx.Call(0, uintptr(nCode), wParam, lParam)
 		return ret
 	}
@@ -123,10 +231,9 @@ func (h *HotkeyManager) listen() {
 	}
 
 	h.hookHandle = hookHandle
-	log.Info("hotkey: keyboard hook installed successfully")
+	log.Info("hotkey: hook installed successfully")
 
-	// Run a message pump — required for low-level hooks to receive events.
-	// Without this, Windows won't deliver WH_KEYBOARD_LL callbacks.
+	// Message pump — required for low-level hooks to receive events.
 	var msg MSG
 	for {
 		select {
@@ -143,7 +250,6 @@ func (h *HotkeyManager) listen() {
 			1, // PM_REMOVE
 		)
 		if ret != 0 {
-			// Dispatch any messages to keep the pump alive
 			continue
 		}
 		time.Sleep(10 * time.Millisecond)

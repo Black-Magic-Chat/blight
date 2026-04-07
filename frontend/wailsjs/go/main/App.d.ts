@@ -7,6 +7,8 @@ export function CheckForUpdates():Promise<main.UpdateInfo>;
 
 export function ClearIndex():Promise<void>;
 
+export function CloseSettings():Promise<void>;
+
 export function CompleteOnboarding(arg1:string):Promise<void>;
 
 export function Execute(arg1:string):Promise<string>;
@@ -16,8 +18,6 @@ export function ExecuteContextAction(arg1:string,arg2:string):Promise<string>;
 export function GetConfig():Promise<main.BlightConfig>;
 
 export function GetContextActions(arg1:string):Promise<Array<main.ContextAction>>;
-
-export function SaveSettings(arg1:string,arg2:number):Promise<void>;
 
 export function GetIcon(arg1:string):Promise<string>;
 
@@ -31,9 +31,15 @@ export function InstallUpdate():Promise<string>;
 
 export function IsFirstRun():Promise<boolean>;
 
+export function IsSettingsMode():Promise<boolean>;
+
+export function OpenSettingsWindow():Promise<void>;
+
 export function RefreshApps():Promise<void>;
 
 export function ReindexFiles():Promise<void>;
+
+export function SaveSettings(arg1:string,arg2:number,arg3:Array<string>):Promise<void>;
 
 export function Search(arg1:string):Promise<Array<main.SearchResult>>;
 

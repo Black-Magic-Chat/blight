@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:developers.raycast.com)",
+      "Bash(node --input-type=module)",
+      "Bash(node -e ':*)",
+      "Bash(node:*)",
+      "Bash(GOOS=windows GOARCH=amd64 go build:*)"
+    ]
+  }
+}

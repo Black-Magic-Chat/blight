@@ -29,16 +29,18 @@ type IndexStatus struct {
 }
 
 type FileIndex struct {
-	mu       sync.RWMutex
-	files    []FileEntry
-	names    []string
-	status   atomic.Value
-	onStatus func(IndexStatus)
+	mu         sync.RWMutex
+	files      []FileEntry
+	names      []string
+	status     atomic.Value
+	onStatus   func(IndexStatus)
+	customDirs []string // user-configured extra scan dirs (from config.IndexDirs)
 }
 
-func NewFileIndex(onStatus func(IndexStatus)) *FileIndex {
+func NewFileIndex(customDirs []string, onStatus func(IndexStatus)) *FileIndex {
 	idx := &FileIndex{
-		onStatus: onStatus,
+		onStatus:   onStatus,
+		customDirs: customDirs,
 	}
 	idx.status.Store(IndexStatus{State: "idle", Message: "Not indexed"})
 	return idx
@@ -108,6 +110,18 @@ func (idx *FileIndex) manualIndex() {
 	}
 	if code := filepath.Join(home, "code"); dirExists(code) {
 		scanDirs = append(scanDirs, code)
+	}
+
+	// Add user-configured extra directories
+	seen := make(map[string]bool)
+	for _, d := range scanDirs {
+		seen[strings.ToLower(d)] = true
+	}
+	for _, d := range idx.customDirs {
+		if d != "" && !seen[strings.ToLower(d)] && dirExists(d) {
+			scanDirs = append(scanDirs, d)
+			seen[strings.ToLower(d)] = true
+		}
 	}
 
 	var allFiles []FileEntry

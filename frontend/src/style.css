@@ -156,6 +156,7 @@ body {
     background: var(--bg-active);
     border: 1px solid var(--border-focus);
     padding: 6px 9px;
+    box-shadow: 0 0 0 1px var(--accent-glow) inset;
 }
 
 .result-icon {
@@ -1007,3 +1008,85 @@ kbd {
     border-top: 1px solid var(--border);
     flex-shrink: 0;
 }
+
+/* === Search Loading Indicator === */
+
+.search-loader {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+    opacity: 0;
+    transform: scale(0.5);
+    transition: opacity 80ms ease, transform 80ms ease;
+}
+
+.search-loader.visible {
+    opacity: 0.7;
+    transform: scale(1);
+    animation: loaderPulse 600ms ease-in-out infinite alternate;
+}
+
+@keyframes loaderPulse {
+    from { opacity: 0.4; transform: scale(0.85); }
+    to { opacity: 1; transform: scale(1.15); }
+}
+
+/* === Match Highlighting === */
+
+.match-chars {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.match-char {
+    color: var(--accent);
+}
+
+/* === Context Action Keyboard Shortcuts === */
+
+.context-action {
+    justify-content: flex-start;
+}
+
+.context-action-label {
+    flex: 1;
+}
+
+.context-action-shortcut {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: 10px;
+    color: var(--text-tertiary);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: var(--font);
+    letter-spacing: 0;
+}
+
+.context-action:hover .context-action-shortcut,
+.context-action.kb-selected .context-action-shortcut {
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-color: var(--border-focus);
+}
+
+.context-action.kb-selected {
+    background: var(--accent-soft);
+    color: var(--accent);
+    outline: none;
+}
+
+/* === Footer Secondary Hint === */
+
+.footer-hint-secondary {
+    color: var(--text-tertiary);
+}
+
+.footer-hint-secondary.hidden {
+    display: none;
+}
+

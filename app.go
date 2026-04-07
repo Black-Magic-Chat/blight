@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -55,25 +56,33 @@ type BlightConfig struct {
 }
 
 type App struct {
-	ctx       context.Context
-	config    BlightConfig
-	scanner   *apps.Scanner
-	usage     *search.UsageTracker
-	clipboard *commands.ClipboardHistory
-	fileIdx   *files.FileIndex
-	hotkey    *hotkey.HotkeyManager
-	tray      *tray.TrayIcon
-	visible   atomic.Bool
-	version   string
+	ctx          context.Context
+	config       BlightConfig
+	scanner      *apps.Scanner
+	usage        *search.UsageTracker
+	clipboard    *commands.ClipboardHistory
+	fileIdx      *files.FileIndex
+	hotkey       *hotkey.HotkeyManager
+	tray         *tray.TrayIcon
+	visible      atomic.Bool
+	version      string
+	settingsMode bool // true when running as the --settings child process
 }
 
 func NewApp(version string) *App {
-	return &App{
-		version: version,
-	}
+	return &App{version: version}
+}
+
+func NewSettingsApp(version string) *App {
+	return &App{version: version, settingsMode: true}
 }
 
 func (a *App) startup(ctx context.Context) {
+	if a.settingsMode {
+		a.settingsOnlyStartup(ctx)
+		return
+	}
+
 	log := debug.Get()
 	defer log.RecoverPanic("app.startup")
 
@@ -94,26 +103,29 @@ func (a *App) startup(ctx context.Context) {
 	go a.clipboard.PollClipboard()
 	log.Debug("clipboard polling started")
 
-	a.fileIdx = files.NewFileIndex(func(status files.IndexStatus) {
+	a.fileIdx = files.NewFileIndex(a.config.IndexDirs, func(status files.IndexStatus) {
 		log.Debug("index status changed", map[string]interface{}{"state": status.State, "message": status.Message, "count": status.Count})
 		runtime.EventsEmit(ctx, "indexStatus", status)
 	})
 	a.fileIdx.Start()
 	log.Info("file indexer started")
 
-	a.hotkey = hotkey.New(func() {
-		log.Debug("hotkey triggered (Alt+Space)")
+	hotkeyStr := a.config.Hotkey
+	if hotkeyStr == "" {
+		hotkeyStr = "Alt+Space"
+	}
+	a.hotkey = hotkey.New(hotkeyStr, func() {
+		log.Debug("hotkey triggered", map[string]interface{}{"hotkey": hotkeyStr})
 		a.ToggleWindow()
 	})
 	a.hotkey.Start()
-	log.Info("global hotkey registered (Alt+Space)")
+	log.Info("global hotkey registered", map[string]interface{}{"hotkey": hotkeyStr})
 
 	a.tray = tray.New(
 		func() { a.ShowWindow() },
 		func() {
 			log.Info("settings requested from tray")
-			a.ShowWindow()
-			runtime.EventsEmit(a.ctx, "openSettings")
+			a.OpenSettingsWindow()
 		},
 		func() { runtime.Quit(ctx) },
 	)
@@ -121,6 +133,22 @@ func (a *App) startup(ctx context.Context) {
 	log.Info("system tray icon created")
 
 	log.Info("startup complete")
+}
+
+// settingsOnlyStartup is the minimal startup for the --settings child process.
+func (a *App) settingsOnlyStartup(ctx context.Context) {
+	a.ctx = ctx
+	a.loadConfig()
+	// Tell the frontend to enter settings-only mode immediately
+	runtime.EventsEmit(ctx, "openSettings")
+}
+
+// settingsShutdown is used by the --settings child process.
+func (a *App) settingsShutdown(_ context.Context) {}
+
+// CloseSettings quits the settings window process.
+func (a *App) CloseSettings() {
+	runtime.Quit(a.ctx)
 }
 
 func (a *App) shutdown(ctx context.Context) {
@@ -193,11 +221,32 @@ func (a *App) GetVersion() string {
 	return a.version
 }
 
+// IsSettingsMode is always false for the main launcher process.
+// The frontend uses this to distinguish the settings-only window.
+func (a *App) IsSettingsMode() bool { return false }
+
+// OpenSettingsWindow spawns blight.exe --settings as a separate OS window.
+func (a *App) OpenSettingsWindow() {
+	log := debug.Get()
+	exe, err := os.Executable()
+	if err != nil {
+		log.Error("OpenSettingsWindow: could not get executable path", map[string]interface{}{"error": err.Error()})
+		return
+	}
+	cmd := exec.Command(exe, "--settings")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: false}
+	if err := cmd.Start(); err != nil {
+		log.Error("OpenSettingsWindow: failed to spawn settings window", map[string]interface{}{"error": err.Error()})
+	}
+}
+
 func (a *App) ToggleWindow() {
 	if a.visible.Load() {
 		runtime.WindowHide(a.ctx)
 		a.visible.Store(false)
 	} else {
+		// Reload config so changes saved in the settings window take effect
+		a.loadConfig()
 		runtime.EventsEmit(a.ctx, "windowShown")
 		runtime.WindowShow(a.ctx)
 		runtime.WindowSetAlwaysOnTop(a.ctx, true)
@@ -206,6 +255,7 @@ func (a *App) ToggleWindow() {
 }
 
 func (a *App) ShowWindow() {
+	a.loadConfig()
 	runtime.EventsEmit(a.ctx, "windowShown")
 	runtime.WindowShow(a.ctx)
 	runtime.WindowSetAlwaysOnTop(a.ctx, true)
@@ -264,15 +314,18 @@ func (a *App) GetConfig() BlightConfig {
 	return a.config
 }
 
-// SaveSettings persists hotkey and clipboard size from the settings UI.
-func (a *App) SaveSettings(hotkey string, maxClipboard int) error {
+// SaveSettings persists settings from the settings UI.
+func (a *App) SaveSettings(hotkey string, maxClipboard int, indexDirs []string) error {
 	if hotkey != "" {
 		a.config.Hotkey = hotkey
 	}
 	if maxClipboard > 0 {
 		a.config.MaxClipboard = maxClipboard
-		a.clipboard.SetMaxSize(maxClipboard)
+		if a.clipboard != nil {
+			a.clipboard.SetMaxSize(maxClipboard)
+		}
 	}
+	a.config.IndexDirs = indexDirs
 	return a.saveConfig()
 }
 
@@ -283,6 +336,29 @@ func (a *App) Search(query string) []SearchResult {
 	}
 
 	var results []SearchResult
+
+	// URL detection: if the query looks like a URL, offer to open it directly.
+	if isURL(query) {
+		results = append(results, SearchResult{
+			ID:       "url-open:" + query,
+			Title:    "Open URL",
+			Subtitle: query,
+			Icon:     "",
+			Category: "Web",
+		})
+	}
+
+	// Path detection: if query looks like a Windows file path, offer to open it.
+	if isFilePath(query) {
+		results = append(results, SearchResult{
+			ID:       "file-open:" + query,
+			Title:    filepath.Base(query),
+			Subtitle: "Open: " + query,
+			Icon:     "",
+			Category: "Files",
+			Path:     query,
+		})
+	}
 
 	if commands.IsCalcQuery(query) {
 		calc := commands.Evaluate(query)
@@ -355,6 +431,14 @@ func (a *App) Execute(id string) string {
 		query := strings.TrimPrefix(id, "web-search:")
 		searchURL := "https://www.google.com/search?q=" + url.QueryEscape(query)
 		runtime.BrowserOpenURL(a.ctx, searchURL)
+		runtime.WindowHide(a.ctx)
+		a.visible.Store(false)
+		return "ok"
+	}
+
+	if strings.HasPrefix(id, "url-open:") {
+		target := strings.TrimPrefix(id, "url-open:")
+		runtime.BrowserOpenURL(a.ctx, target)
 		runtime.WindowHide(a.ctx)
 		a.visible.Store(false)
 		return "ok"
@@ -711,6 +795,25 @@ func prettifyPath(path string) string {
 		return "~" + path[len(home):]
 	}
 	return path
+}
+
+// isURL returns true if s looks like an http/https/ftp URL.
+func isURL(s string) bool {
+	sl := strings.ToLower(s)
+	return strings.HasPrefix(sl, "http://") ||
+		strings.HasPrefix(sl, "https://") ||
+		strings.HasPrefix(sl, "ftp://")
+}
+
+// isFilePath returns true if s looks like a Windows absolute path or UNC path.
+func isFilePath(s string) bool {
+	if len(s) >= 3 && s[1] == ':' && (s[2] == '\\' || s[2] == '/') {
+		return true // e.g. C:\foo
+	}
+	if strings.HasPrefix(s, `\\`) {
+		return true // UNC path
+	}
+	return false
 }
 
 var (

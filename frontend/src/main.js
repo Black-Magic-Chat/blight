@@ -5,6 +5,14 @@ import {
 } from '../wailsjs/go/main/App';
 import { EventsOn } from '../wailsjs/runtime/runtime';
 
+// Secondary action mapping: result id prefix → action id
+const SECONDARY_ACTIONS = {
+    'file-open:': 'explorer',  // Show in Explorer
+    'clip-':      'copy',       // Copy clipboard entry
+    'sys-':       'run',        // Run system command
+    // Apps: determined at runtime (first non-open action)
+};
+
 class Blight {
     constructor() {
         this.selectedIndex = 0;
@@ -14,6 +22,9 @@ class Blight {
         this.toastTimer = null;
         this.toastHovered = false;
         this.contextTarget = null;
+        this.contextMenuSelectedIndex = -1;
+        this.contextMenuActions = [];
+        this.currentQuery = '';
 
         // Icon cache: path → base64 data URI (persists across re-renders)
         this.iconCache = new Map();
@@ -61,7 +72,6 @@ class Blight {
     }
 
     showUpdateUI(update) {
-        // Remove any existing update badge to prevent duplicates
         const existing = document.querySelector('.update-badge');
         if (existing) existing.remove();
 
@@ -162,11 +172,9 @@ class Blight {
                 return;
             }
 
+            // Context menu keyboard navigation
             if (!this.contextMenuEl.classList.contains('hidden')) {
-                if (e.key === 'Escape') {
-                    this.hideContextMenu();
-                    e.preventDefault();
-                }
+                this.handleContextMenuKeydown(e);
                 return;
             }
 
@@ -181,12 +189,24 @@ class Blight {
                     break;
                 case 'Enter':
                     e.preventDefault();
-                    this.executeSelected();
+                    if (e.ctrlKey) {
+                        this.executeSecondaryAction();
+                    } else {
+                        this.executeSelected();
+                    }
+                    break;
+                case 'k':
+                case 'K':
+                    if (e.ctrlKey) {
+                        e.preventDefault();
+                        this.openActionPanelForSelected();
+                    }
                     break;
                 case 'Escape':
                     e.preventDefault();
                     if (this.searchInput.value) {
                         this.searchInput.value = '';
+                        this.currentQuery = '';
                         this.loadDefaultResults();
                     } else {
                         HideWindow();
@@ -211,9 +231,6 @@ class Blight {
         }
 
         // Click outside the window → hide
-        // Guard against the blur that fires immediately after WindowShow (Alt+Space race).
-        // We use a Wails event from Go (emitted right before WindowShow) because the
-        // browser 'focus' event is unreliable in WebView2.
         this.lastShownAt = 0;
         EventsOn('windowShown', () => { this.lastShownAt = Date.now(); });
         window.addEventListener('blur', () => {
@@ -229,11 +246,14 @@ class Blight {
 
     onSearchInput() {
         clearTimeout(this.debounceTimer);
+        this.setLoading(true);
         this.debounceTimer = setTimeout(async () => {
             const query = this.searchInput.value.trim();
             const seq = ++this.searchSeq;
             const results = await Search(query);
+            this.setLoading(false);
             if (seq !== this.searchSeq) return; // ignore stale responses
+            this.currentQuery = query;
             this.results = results;
             this.selectedIndex = 0;
             this.renderResults();
@@ -244,9 +264,15 @@ class Blight {
         const seq = ++this.searchSeq;
         const results = await Search('');
         if (seq !== this.searchSeq) return;
+        this.currentQuery = '';
         this.results = results;
         this.selectedIndex = 0;
         this.renderResults();
+    }
+
+    setLoading(loading) {
+        const loaderEl = document.getElementById('search-loader');
+        if (loaderEl) loaderEl.classList.toggle('visible', loading);
     }
 
     moveSelection(delta) {
@@ -269,7 +295,7 @@ class Blight {
 
         if (result.id.startsWith('web-search:')) {
             await Execute(result.id);
-            return; // browser opens, no toast needed
+            return;
         }
 
         const response = await Execute(result.id);
@@ -284,6 +310,52 @@ class Blight {
         }
     }
 
+    async executeSecondaryAction() {
+        if (this.results.length === 0) return;
+        const result = this.results[this.selectedIndex];
+        const actionId = this.getSecondaryActionId(result.id);
+        if (!actionId) return;
+
+        const response = await ExecuteContextAction(result.id, actionId);
+        this.handleContextResponse(actionId, response, result.title);
+    }
+
+    getSecondaryActionId(resultId) {
+        if (resultId.startsWith('file-open:')) return 'explorer';
+        if (resultId.startsWith('clip-')) return 'copy';
+        if (resultId.startsWith('sys-')) return null; // no secondary for system
+        if (resultId.startsWith('web-search:')) return null;
+        if (resultId === 'calc-result') return null;
+        // App → Run as Admin
+        return 'admin';
+    }
+
+    getSecondaryActionLabel(resultId) {
+        if (resultId.startsWith('file-open:')) return 'Show in Explorer';
+        if (resultId.startsWith('clip-')) return 'Copy';
+        return 'Run as Admin';
+    }
+
+    // --- Action Panel (Ctrl+K) ---
+
+    async openActionPanelForSelected() {
+        if (this.results.length === 0) return;
+        const result = this.results[this.selectedIndex];
+        const selectedEl = this.resultsContainer.querySelector('.result-item.selected');
+
+        let x, y;
+        if (selectedEl) {
+            const rect = selectedEl.getBoundingClientRect();
+            x = rect.right - 8;
+            y = rect.bottom;
+        } else {
+            x = window.innerWidth - 8;
+            y = window.innerHeight / 2;
+        }
+
+        await this.showContextMenu(x, y, result.id, result.title, true);
+    }
+
     // --- Rendering ---
 
     renderResults() {
@@ -294,6 +366,7 @@ class Blight {
                     <div>No results found</div>
                 </div>
             `;
+            this.updateFooterHints(null);
             return;
         }
 
@@ -302,7 +375,7 @@ class Blight {
 
         this.results.forEach((result, index) => {
             if (result.category !== lastCategory) {
-                html += `<div class="result-category">${result.category}</div>`;
+                html += `<div class="result-category">${this.escapeHtml(result.category)}</div>`;
                 lastCategory = result.category;
             }
 
@@ -317,14 +390,16 @@ class Blight {
                 iconHtml = `<div class="result-icon result-icon-fallback" data-icon-index="${index}">${fallbackSvg}</div>`;
             }
 
+            const titleHtml = this.highlightMatch(result.title, this.currentQuery);
+
             html += `
                 <div class="result-item ${selected}" data-index="${index}" data-id="${result.id}">
                     ${iconHtml}
                     <div class="result-text">
-                        <div class="result-title">${result.title}</div>
-                        <div class="result-subtitle">${result.subtitle}</div>
+                        <div class="result-title">${titleHtml}</div>
+                        <div class="result-subtitle">${this.escapeHtml(result.subtitle)}</div>
                     </div>
-                    <div class="result-badge">${result.category}</div>
+                    <div class="result-badge">${this.escapeHtml(result.category)}</div>
                 </div>
             `;
         });
@@ -347,47 +422,99 @@ class Blight {
                 e.preventDefault();
                 this.selectedIndex = parseInt(item.dataset.index);
                 this.renderResults();
-                this.showContextMenu(e.clientX, e.clientY, item.dataset.id, item.querySelector('.result-title')?.textContent || '');
+                this.showContextMenu(e.clientX, e.clientY, item.dataset.id, item.querySelector('.result-title')?.textContent || '', false);
             });
         });
 
-        // Async icon loading: only fetch icons not yet in cache
+        // Async icon loading
         this.results.forEach((result, index) => {
             if (!result.path || this.iconCache.has(result.path)) return;
             if (result.icon && result.icon.startsWith('data:')) return;
             GetIcon(result.path).then(icon => {
                 if (!icon) return;
                 this.iconCache.set(result.path, icon);
-                // Update the placeholder if it's still rendered for this result index
                 const el = this.resultsContainer.querySelector(`[data-icon-index="${index}"]`);
                 if (el) el.outerHTML = `<div class="result-icon"><img src="${icon}" alt=""/></div>`;
             }).catch(() => {});
         });
+
+        // Update footer hints for selected item
+        const selected = this.results[this.selectedIndex];
+        this.updateFooterHints(selected || null);
+    }
+
+    // Update footer hints based on current selection
+    updateFooterHints(result) {
+        const secondaryHint = document.getElementById('footer-hint-secondary');
+        if (!secondaryHint) return;
+
+        if (!result) {
+            secondaryHint.classList.add('hidden');
+            return;
+        }
+
+        const secondaryLabel = this.getSecondaryActionLabel(result.id);
+        const hasSecondary = this.getSecondaryActionId(result.id) !== null;
+
+        if (hasSecondary) {
+            secondaryHint.innerHTML = `<kbd>Ctrl+↵</kbd> ${this.escapeHtml(secondaryLabel)}`;
+            secondaryHint.classList.remove('hidden');
+        } else {
+            secondaryHint.classList.add('hidden');
+        }
+    }
+
+    // --- Match Highlighting ---
+
+    highlightMatch(text, query) {
+        if (!query) return this.escapeHtml(text);
+
+        const lowerText = text.toLowerCase();
+        const lowerQuery = query.toLowerCase();
+
+        // Substring match: highlight the whole matched substring
+        const idx = lowerText.indexOf(lowerQuery);
+        if (idx !== -1) {
+            return this.escapeHtml(text.slice(0, idx)) +
+                   `<span class="match-chars">${this.escapeHtml(text.slice(idx, idx + lowerQuery.length))}</span>` +
+                   this.escapeHtml(text.slice(idx + lowerQuery.length));
+        }
+
+        // Fuzzy match: highlight individual matched characters
+        let result = '';
+        let qi = 0;
+        for (let i = 0; i < text.length; i++) {
+            if (qi < lowerQuery.length && lowerText[i] === lowerQuery[qi]) {
+                result += `<span class="match-char">${this.escapeHtml(text[i])}</span>`;
+                qi++;
+            } else {
+                result += this.escapeHtml(text[i]);
+            }
+        }
+        return result;
+    }
+
+    escapeHtml(str) {
+        if (typeof str !== 'string') return '';
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
     }
 
     // --- Context Menu ---
 
-    async showContextMenu(x, y, resultId, resultTitle) {
+    async showContextMenu(x, y, resultId, resultTitle, fromKeyboard = false) {
         this.contextTarget = resultId;
         const actions = await GetContextActions(resultId);
 
         if (actions.length === 0) return;
 
-        let html = '';
-        if (resultTitle) {
-            html += `<div class="context-menu-header">${resultTitle}</div>`;
-        }
-        actions.forEach(action => {
-            html += `
-                <button class="context-action" data-action="${action.id}">
-                    <span class="context-action-icon">${action.icon}</span>
-                    ${action.label}
-                </button>
-            `;
-        });
+        this.contextMenuActions = actions;
+        this.contextMenuSelectedIndex = fromKeyboard ? 0 : -1;
 
-        this.contextMenuEl.innerHTML = html;
-        this.contextMenuEl.classList.remove('hidden');
+        this.renderContextMenu(resultTitle, fromKeyboard);
 
         // Position with boundary clamping (measure after adding to DOM)
         this.contextMenuEl.style.left = '0px';
@@ -395,8 +522,44 @@ class Blight {
         const rect = this.contextMenuEl.getBoundingClientRect();
         const maxX = window.innerWidth - rect.width - 8;
         const maxY = window.innerHeight - rect.height - 8;
-        this.contextMenuEl.style.left = `${Math.min(x, maxX)}px`;
-        this.contextMenuEl.style.top = `${Math.min(y, maxY)}px`;
+        // Prefer placing to the left of x so it doesn't clip the right edge
+        const targetX = Math.min(Math.max(x - rect.width, 8), maxX);
+        const targetY = Math.min(Math.max(y, 8), maxY);
+        this.contextMenuEl.style.left = `${targetX}px`;
+        this.contextMenuEl.style.top = `${targetY}px`;
+    }
+
+    renderContextMenu(resultTitle, fromKeyboard) {
+        const actions = this.contextMenuActions;
+        let html = '';
+
+        if (resultTitle) {
+            html += `<div class="context-menu-header">${this.escapeHtml(resultTitle)}</div>`;
+        }
+
+        actions.forEach((action, idx) => {
+            const isSelected = idx === this.contextMenuSelectedIndex;
+            const kbClass = isSelected ? ' kb-selected' : '';
+
+            // Show keyboard shortcut hint for first two actions
+            let shortcutHtml = '';
+            if (idx === 0) {
+                shortcutHtml = `<kbd class="context-action-shortcut">↵</kbd>`;
+            } else if (idx === 1) {
+                shortcutHtml = `<kbd class="context-action-shortcut">⌃↵</kbd>`;
+            }
+
+            html += `
+                <button class="context-action${kbClass}" data-action="${action.id}" data-idx="${idx}">
+                    <span class="context-action-icon">${action.icon}</span>
+                    <span class="context-action-label">${this.escapeHtml(action.label)}</span>
+                    ${shortcutHtml}
+                </button>
+            `;
+        });
+
+        this.contextMenuEl.innerHTML = html;
+        this.contextMenuEl.classList.remove('hidden');
 
         this.contextMenuEl.querySelectorAll('.context-action').forEach(btn => {
             btn.addEventListener('click', async () => {
@@ -405,6 +568,51 @@ class Blight {
                 this.hideContextMenu();
                 this.handleContextResponse(actionId, response, resultTitle);
             });
+
+            btn.addEventListener('mouseenter', () => {
+                this.contextMenuSelectedIndex = parseInt(btn.dataset.idx);
+                this.reRenderContextMenuSelection();
+            });
+        });
+    }
+
+    handleContextMenuKeydown(e) {
+        const actions = this.contextMenuActions;
+        if (actions.length === 0) return;
+
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                this.contextMenuSelectedIndex = (this.contextMenuSelectedIndex + 1) % actions.length;
+                this.reRenderContextMenuSelection();
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                this.contextMenuSelectedIndex = (this.contextMenuSelectedIndex - 1 + actions.length) % actions.length;
+                this.reRenderContextMenuSelection();
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (this.contextMenuSelectedIndex >= 0) {
+                    const action = actions[this.contextMenuSelectedIndex];
+                    ExecuteContextAction(this.contextTarget, action.id).then(response => {
+                        const resultTitle = this.results[this.selectedIndex]?.title || '';
+                        this.hideContextMenu();
+                        this.handleContextResponse(action.id, response, resultTitle);
+                    });
+                }
+                break;
+            case 'Escape':
+                e.preventDefault();
+                this.hideContextMenu();
+                this.searchInput.focus();
+                break;
+        }
+    }
+
+    reRenderContextMenuSelection() {
+        this.contextMenuEl.querySelectorAll('.context-action').forEach((btn, idx) => {
+            btn.classList.toggle('kb-selected', idx === this.contextMenuSelectedIndex);
         });
     }
 
@@ -440,13 +648,14 @@ class Blight {
     hideContextMenu() {
         this.contextMenuEl.classList.add('hidden');
         this.contextTarget = null;
+        this.contextMenuSelectedIndex = -1;
+        this.contextMenuActions = [];
     }
 
     // --- Settings Panel ---
 
     async openSettings() {
         this.settingsPanelEl.classList.remove('hidden');
-        // Reset animation
         this.settingsPanelEl.style.animation = 'none';
         this.settingsPanelEl.offsetHeight; // force reflow
         this.settingsPanelEl.style.animation = '';
@@ -465,7 +674,6 @@ class Blight {
 
             const indexStatus = document.getElementById('settings-index-status');
             if (indexStatus) {
-                // Reflect current index state from last notification
                 const lastNotif = this.notifications[0];
                 if (lastNotif) indexStatus.textContent = lastNotif.message;
             }
@@ -556,7 +764,6 @@ class Blight {
             });
         }
 
-        // Update index status in settings when events arrive
         EventsOn('indexStatus', (status) => {
             const statusEl = document.getElementById('settings-index-status');
             if (statusEl && !this.settingsPanelEl.classList.contains('hidden')) {
@@ -600,6 +807,26 @@ class Blight {
             return `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
                 <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+            </svg>`;
+        }
+        if (c === 'calculator') {
+            return `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="2" width="16" height="20" rx="3" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+                <rect x="7" y="5" width="10" height="4" rx="1" fill="rgba(255,255,255,0.1)"/>
+                <rect x="7" y="12" width="3" height="2" rx="0.5" fill="rgba(255,255,255,0.15)"/>
+                <rect x="10.5" y="12" width="3" height="2" rx="0.5" fill="rgba(255,255,255,0.15)"/>
+                <rect x="14" y="12" width="3" height="2" rx="0.5" fill="rgba(255,255,255,0.2)"/>
+                <rect x="7" y="16" width="3" height="2" rx="0.5" fill="rgba(255,255,255,0.15)"/>
+                <rect x="10.5" y="16" width="3" height="2" rx="0.5" fill="rgba(255,255,255,0.15)"/>
+                <rect x="14" y="16" width="3" height="4" rx="0.5" fill="rgba(92,154,255,0.3)"/>
+            </svg>`;
+        }
+        if (c === 'clipboard') {
+            return `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2" stroke="rgba(255,255,255,0.2)" stroke-width="1" fill="rgba(255,255,255,0.05)"/>
+                <rect x="8" y="2" width="8" height="4" rx="1.5" stroke="rgba(255,255,255,0.2)" stroke-width="1" fill="rgba(255,255,255,0.08)"/>
+                <line x1="8" y1="11" x2="16" y2="11" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+                <line x1="8" y1="14" x2="14" y2="14" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
             </svg>`;
         }
         return `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -713,7 +940,7 @@ class Blight {
             <div class="notif-history-item">
                 <span class="notif-h-icon">${n.icon}</span>
                 <div class="notif-h-text">
-                    <div class="notif-h-msg">${n.message}</div>
+                    <div class="notif-h-msg">${this.escapeHtml(n.message)}</div>
                     <div class="notif-h-time">${n.time}</div>
                 </div>
             </div>

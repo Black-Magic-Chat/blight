@@ -10,6 +10,10 @@ export function ClearIndex() {
   return window['go']['main']['App']['ClearIndex']();
 }
 
+export function CloseSettings() {
+  return window['go']['main']['App']['CloseSettings']();
+}
+
 export function CompleteOnboarding(arg1) {
   return window['go']['main']['App']['CompleteOnboarding'](arg1);
 }
@@ -28,10 +32,6 @@ export function GetConfig() {
 
 export function GetContextActions(arg1) {
   return window['go']['main']['App']['GetContextActions'](arg1);
-}
-
-export function SaveSettings(arg1, arg2) {
-  return window['go']['main']['App']['SaveSettings'](arg1, arg2);
 }
 
 export function GetIcon(arg1) {
@@ -58,12 +58,24 @@ export function IsFirstRun() {
   return window['go']['main']['App']['IsFirstRun']();
 }
 
+export function IsSettingsMode() {
+  return window['go']['main']['App']['IsSettingsMode']();
+}
+
+export function OpenSettingsWindow() {
+  return window['go']['main']['App']['OpenSettingsWindow']();
+}
+
 export function RefreshApps() {
   return window['go']['main']['App']['RefreshApps']();
 }
 
 export function ReindexFiles() {
   return window['go']['main']['App']['ReindexFiles']();
+}
+
+export function SaveSettings(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SaveSettings'](arg1, arg2, arg3);
 }
 
 export function Search(arg1) {
