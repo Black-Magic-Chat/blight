@@ -1,3 +1,5 @@
+//go:build windows
+
 package apps
 
 import (
@@ -16,20 +18,20 @@ import (
 )
 
 var (
-	shell32            = syscall.NewLazyDLL("shell32.dll")
-	user32             = syscall.NewLazyDLL("user32.dll")
-	gdi32              = syscall.NewLazyDLL("gdi32.dll")
-	ole32              = syscall.NewLazyDLL("ole32.dll")
-	procSHGetFileInfo  = shell32.NewProc("SHGetFileInfoW")
-	procSHGetImageList = shell32.NewProc("SHGetImageList")
-	procDestroyIcon    = user32.NewProc("DestroyIcon")
-	procGetIconInfo    = user32.NewProc("GetIconInfo")
-	procGetDIBits      = gdi32.NewProc("GetDIBits")
-	procCreateCompatDC = gdi32.NewProc("CreateCompatibleDC")
-	procDeleteDC       = gdi32.NewProc("DeleteDC")
-	procDeleteObject   = gdi32.NewProc("DeleteObject")
-	procGetObject      = gdi32.NewProc("GetObjectW")
-	procCoInitializeEx = ole32.NewProc("CoInitializeEx")
+	shell32                         = syscall.NewLazyDLL("shell32.dll")
+	user32                          = syscall.NewLazyDLL("user32.dll")
+	gdi32                           = syscall.NewLazyDLL("gdi32.dll")
+	ole32                           = syscall.NewLazyDLL("ole32.dll")
+	procSHGetFileInfo               = shell32.NewProc("SHGetFileInfoW")
+	procSHGetImageList              = shell32.NewProc("SHGetImageList")
+	procDestroyIcon                 = user32.NewProc("DestroyIcon")
+	procGetIconInfo                 = user32.NewProc("GetIconInfo")
+	procGetDIBits                   = gdi32.NewProc("GetDIBits")
+	procCreateCompatDC              = gdi32.NewProc("CreateCompatibleDC")
+	procDeleteDC                    = gdi32.NewProc("DeleteDC")
+	procDeleteObject                = gdi32.NewProc("DeleteObject")
+	procGetObject                   = gdi32.NewProc("GetObjectW")
+	procCoInitializeEx              = ole32.NewProc("CoInitializeEx")
 	procSHCreateItemFromParsingName = shell32.NewProc("SHCreateItemFromParsingName")
 )
 
@@ -47,10 +49,10 @@ const (
 	SHIL_JUMBO      = 4 // 256x256 (Vista+)
 
 	// IShellItemImageFactory flags (SIIGBF)
-	SIIGBF_RESIZETOFIT  = 0x00
-	SIIGBF_BIGGERSIZEOK = 0x01
-	SIIGBF_MEMORYONLY   = 0x02
-	SIIGBF_ICONONLY     = 0x04
+	SIIGBF_RESIZETOFIT   = 0x00
+	SIIGBF_BIGGERSIZEOK  = 0x01
+	SIIGBF_MEMORYONLY    = 0x02
+	SIIGBF_ICONONLY      = 0x04
 	SIIGBF_THUMBNAILONLY = 0x08
 )
 
