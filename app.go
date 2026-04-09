@@ -444,6 +444,16 @@ func (a *App) GetStartupEnabled() bool {
 	return startup.IsEnabled()
 }
 
+func (a *App) OpenFolderPicker() string {
+	path, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Select Directory to Index",
+	})
+	if err != nil {
+		return ""
+	}
+	return path
+}
+
 func (a *App) Search(query string) []SearchResult {
 	log := debug.Get()
 	if query == "" {

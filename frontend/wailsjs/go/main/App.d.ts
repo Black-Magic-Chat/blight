@@ -43,6 +43,8 @@ export function SaveSettings(arg1:main.BlightConfig):Promise<void>;
 
 export function GetStartupEnabled():Promise<boolean>;
 
+export function OpenFolderPicker():Promise<string>;
+
 export function Search(arg1:string):Promise<Array<main.SearchResult>>;
 
 export function ShowWindow():Promise<void>;

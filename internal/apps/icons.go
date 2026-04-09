@@ -209,14 +209,14 @@ func extractIconShellItemImageFactory(path string, size int) string {
 	defer comRelease(imageFactory)
 
 	// IShellItemImageFactory::GetImage(SIZE, SIIGBF, HBITMAP*)
-	// SIIGBF_ICONONLY ensures we get the icon (not a thumbnail preview of file contents)
-	sz := sizeStruct{Width: int32(size), Height: int32(size)}
+	cx := uint32(size)
+	cy := uint32(size)
+	sizeVal := uintptr(cx) | (uintptr(cy) << 32)
+
 	var hBitmap uintptr
 	imageFactoryVtable := getVtable(imageFactory)
-	// GetImage is at vtable index 3 (IUnknown has 3 methods: QI, AddRef, Release)
 	hr, _, _ = syscall.SyscallN(imageFactoryVtable[3], imageFactory,
-		uintptr(sz.Width),
-		uintptr(sz.Height),
+		sizeVal,
 		SIIGBF_ICONONLY,
 		uintptr(unsafe.Pointer(&hBitmap)),
 	)
