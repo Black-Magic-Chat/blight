@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/blang/semver"
 )
@@ -41,7 +40,8 @@ type ghAsset struct {
 }
 
 // CheckForUpdates fetches all releases from GitHub and returns the newest one
-// whose version is greater than currentVersion (pre-releases included).
+// whose version is greater than currentVersion (pre-releases included)
+// that has an installer asset for the current OS build.
 func (u *Updater) CheckForUpdates(currentVersion string) (*Release, bool, error) {
 	cur, err := parseTolerant(currentVersion)
 	if err != nil {
@@ -77,10 +77,10 @@ func (u *Updater) CheckForUpdates(currentVersion string) (*Release, bool, error)
 		if !v.GT(cur) {
 			continue
 		}
-		// Find a setup.exe asset
+		// Find an installer asset matching the current OS build.
 		for _, asset := range rel.Assets {
 			name := strings.ToLower(asset.Name)
-			if strings.Contains(name, "setup") && strings.HasSuffix(name, ".exe") {
+			if isInstallerAsset(name) {
 				return &Release{
 					Version: tag,
 					URL:     asset.BrowserDownloadURL,
@@ -93,16 +93,14 @@ func (u *Updater) CheckForUpdates(currentVersion string) (*Release, bool, error)
 	return nil, false, nil
 }
 
-// ApplyUpdate downloads the setup.exe installer and runs it silently.
-// The NSIS installer takes over from here — it will kill the running process
-// and restart it after installation.
+// ApplyUpdate downloads the matching installer and starts it.
 func (u *Updater) ApplyUpdate(release *Release) error {
 	tmp, err := os.MkdirTemp("", "blight-update-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
 
-	dest := filepath.Join(tmp, "blight-setup.exe")
+	dest := filepath.Join(tmp, installerTempName())
 
 	resp, err := http.Get(release.URL)
 	if err != nil {
@@ -120,9 +118,8 @@ func (u *Updater) ApplyUpdate(release *Release) error {
 		return fmt.Errorf("download write failed: %w", copyErr)
 	}
 
-	// Run the NSIS installer with its UI so the user can see progress
 	cmd := exec.Command(dest)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: false}
+	cmd.SysProcAttr = installerSysProcAttr()
 	return cmd.Start()
 }
 
