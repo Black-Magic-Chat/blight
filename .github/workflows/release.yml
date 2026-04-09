@@ -96,6 +96,12 @@ jobs:
         working-directory: frontend
         run: pnpm install
 
+      - name: Install Linux build dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
       - name: Install NSIS
         if: matrix.os == 'windows-latest'
         run: |
@@ -115,17 +121,15 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
-          wails build -platform windows/amd64 -s -skipbindings -ldflags "-X main.Version=${{ needs.check-version.outputs.version }}"
-          tar -C build/bin -czf blight-linux-amd64.tar.gz blight.exe
+          wails build -ldflags "-X main.Version=${{ needs.check-version.outputs.version }}"
+          tar -C build/bin -czf blight-linux-amd64.tar.gz blight
 
       - name: Build macOS installer
         if: matrix.os == 'macos-latest'
         shell: bash
         run: |
-          wails build -platform windows/amd64 -s -skipbindings -ldflags "-X main.Version=${{ needs.check-version.outputs.version }}"
-          mkdir -p dist-macos
-          cp build/bin/blight.exe dist-macos/
-          hdiutil create -volname "blight" -srcfolder "dist-macos" -ov -format UDZO blight-macos-amd64.dmg
+          wails build -ldflags "-X main.Version=${{ needs.check-version.outputs.version }}"
+          hdiutil create -volname "blight" -srcfolder "build/bin/blight.app" -ov -format UDZO blight-macos-amd64.dmg
 
       - name: Upload installer
         uses: actions/upload-artifact@v4
