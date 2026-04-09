@@ -2,8 +2,11 @@
 
 package commands
 
-import "syscall"
+import (
+	"os/exec"
+	"syscall"
+)
 
-func hiddenSysProcAttr() *syscall.SysProcAttr {
-	return &syscall.SysProcAttr{}
+func applyHiddenProcessAttrs(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 }

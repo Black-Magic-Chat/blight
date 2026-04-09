@@ -4,7 +4,7 @@ package files
 
 import "syscall"
 
-// HiddenCmd returns portable process attributes for non-Windows targets.
+// HiddenCmd returns process attributes for launching helper commands detached on non-Windows targets.
 func HiddenCmd(name string, args ...string) *syscall.SysProcAttr {
-	return &syscall.SysProcAttr{}
+	return &syscall.SysProcAttr{Setsid: true}
 }
