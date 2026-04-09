@@ -82,6 +82,10 @@ export function GetStartupEnabled() {
   return window['go']['main']['App']['GetStartupEnabled']();
 }
 
+export function OpenFolderPicker() {
+  return window['go']['main']['App']['OpenFolderPicker']();
+}
+
 export function Search(arg1) {
   return window['go']['main']['App']['Search'](arg1);
 }

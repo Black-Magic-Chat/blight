@@ -2,7 +2,7 @@ import {
     IsFirstRun, IsSettingsMode, CompleteOnboarding, Search, Execute, HideWindow,
     GetContextActions, ExecuteContextAction, CheckForUpdates, InstallUpdate,
     GetIcon, GetConfig, SaveSettings, GetVersion, ReindexFiles, ClearIndex,
-    CloseSettings, GetStartupEnabled
+    CloseSettings, GetStartupEnabled, OpenFolderPicker
 } from '../wailsjs/go/main/App';
 import { EventsOn } from '../wailsjs/runtime/runtime';
 
@@ -42,6 +42,8 @@ class Blight {
 
         // Track index dirs for settings save
         this._currentIndexDirs = [];
+
+        this.lastUpdateCheck = 0;
 
         this.searchInput = document.getElementById('search-input');
         this.resultsContainer = document.getElementById('results');
@@ -917,6 +919,17 @@ class Blight {
         const updateStatus = document.getElementById('settings-update-status');
         if (checkUpdatesBtn) {
             checkUpdatesBtn.addEventListener('click', async () => {
+                const cooldown = 10000;
+                const elapsed = Date.now() - this.lastUpdateCheck;
+                if (elapsed < cooldown) {
+                    const remaining = Math.ceil((cooldown - elapsed) / 1000);
+                    if (updateStatus) {
+                        updateStatus.textContent = `Please wait ${remaining}s before checking again`;
+                        updateStatus.className = 'settings-update-status error';
+                    }
+                    return;
+                }
+                this.lastUpdateCheck = Date.now();
                 checkUpdatesBtn.disabled = true;
                 checkUpdatesBtn.textContent = 'Checking…';
                 if (updateStatus) { updateStatus.textContent = ''; updateStatus.className = 'settings-update-status'; }
@@ -953,10 +966,10 @@ class Blight {
 
         const addDirBtn = document.getElementById('settings-add-dir');
         if (addDirBtn) {
-            addDirBtn.addEventListener('click', () => {
-                const dir = prompt('Enter directory path to index:');
-                if (dir && dir.trim()) {
-                    this._currentIndexDirs = [...(this._currentIndexDirs || []), dir.trim()];
+            addDirBtn.addEventListener('click', async () => {
+                const dir = await OpenFolderPicker();
+                if (dir) {
+                    this._currentIndexDirs = [...(this._currentIndexDirs || []), dir];
                     this._renderIndexDirs();
                 }
             });

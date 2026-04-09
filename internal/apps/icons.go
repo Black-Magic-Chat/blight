@@ -118,11 +118,6 @@ type bitmapInfoHeader struct {
 	ClrImportant  uint32
 }
 
-type sizeStruct struct {
-	Width  int32
-	Height int32
-}
-
 var (
 	iconCache   sync.Map
 	comInitOnce sync.Once
@@ -209,14 +204,18 @@ func extractIconShellItemImageFactory(path string, size int) string {
 	defer comRelease(imageFactory)
 
 	// IShellItemImageFactory::GetImage(SIZE, SIIGBF, HBITMAP*)
-	// SIIGBF_ICONONLY ensures we get the icon (not a thumbnail preview of file contents)
-	sz := sizeStruct{Width: int32(size), Height: int32(size)}
+	// On x64 Windows ABI, SIZE (8 bytes, two int32s) is passed as a single 64-bit
+	// register value: cx in the low 32 bits, cy in the high 32 bits.
+	// Passing them as two separate uintptr args would corrupt every subsequent
+	// argument and cause the COM method to write to an invalid address → crash.
+	cx := uint32(size)
+	cy := uint32(size)
+	sizeVal := uintptr(cx) | (uintptr(cy) << 32)
+
 	var hBitmap uintptr
 	imageFactoryVtable := getVtable(imageFactory)
-	// GetImage is at vtable index 3 (IUnknown has 3 methods: QI, AddRef, Release)
 	hr, _, _ = syscall.SyscallN(imageFactoryVtable[3], imageFactory,
-		uintptr(sz.Width),
-		uintptr(sz.Height),
+		sizeVal,
 		SIIGBF_ICONONLY,
 		uintptr(unsafe.Pointer(&hBitmap)),
 	)
