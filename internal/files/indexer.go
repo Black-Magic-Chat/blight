@@ -28,12 +28,13 @@ type IndexStatus struct {
 }
 
 type FileIndex struct {
-	mu         sync.RWMutex
-	files      []FileEntry
-	names      []string
-	status     atomic.Value
-	onStatus   func(IndexStatus)
-	customDirs []string // user-configured extra scan dirs (from config.IndexDirs)
+	mu          sync.RWMutex
+	files       []FileEntry
+	names       []string
+	status      atomic.Value
+	lastIndexed atomic.Value // stores time.Time
+	onStatus    func(IndexStatus)
+	customDirs  []string // user-configured extra scan dirs (from config.IndexDirs)
 }
 
 func NewFileIndex(customDirs []string, onStatus func(IndexStatus)) *FileIndex {
@@ -51,6 +52,17 @@ func (idx *FileIndex) Start() {
 
 func (idx *FileIndex) Reindex() {
 	go idx.buildIndex()
+}
+
+func (idx *FileIndex) UpdateDirs(dirs []string) {
+	idx.mu.Lock()
+	idx.customDirs = dirs
+	idx.mu.Unlock()
+}
+
+func (idx *FileIndex) IsStale(maxAge time.Duration) bool {
+	t, ok := idx.lastIndexed.Load().(time.Time)
+	return !ok || t.IsZero() || time.Since(t) > maxAge
 }
 
 func (idx *FileIndex) ClearIndex() {
@@ -189,6 +201,7 @@ func (idx *FileIndex) manualIndex() {
 
 	elapsed := time.Since(start).Round(time.Millisecond)
 	msg := fmt.Sprintf("%d files indexed in %s", count, elapsed)
+	idx.lastIndexed.Store(time.Now())
 	idx.setStatus(IndexStatus{
 		State:   "ready",
 		Message: msg,

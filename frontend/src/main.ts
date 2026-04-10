@@ -149,34 +149,74 @@ class Blight {
     }
 
     showUpdateUI(update: main.UpdateInfo): void {
+        // Footer badge
         const existing = document.querySelector('.update-badge');
         if (existing) existing.remove();
-
         const badge = document.createElement('div');
         badge.className = 'notification-indicator update-badge';
-        badge.innerHTML = `
-            <span class="notif-icon" style="color: #4ade80;">⬇</span>
-            <span class="notif-text" style="color: #4ade80;">Update ${update.version}</span>
-        `;
+        badge.innerHTML = `<span class="notif-icon" style="color:#4ade80;">⬇</span><span class="notif-text" style="color:#4ade80;">Update ${update.version}</span>`;
         badge.style.cursor = 'pointer';
-        badge.title = `Click to install update ${update.version}`;
         badge.onclick = () => this.installUpdate(update);
-
-        if (this.notifIndicator && this.notifIndicator.parentNode) {
+        if (this.notifIndicator?.parentNode) {
             this.notifIndicator.parentNode.insertBefore(badge, this.notifIndicator);
         }
+
+        // In-settings install row
+        const row = document.getElementById('settings-update-install-row');
+        const label = document.getElementById('settings-update-version-label');
+        const installBtn = document.getElementById('settings-install-update') as HTMLButtonElement | null;
+        if (row) row.classList.remove('hidden');
+        if (label) label.textContent = `v${update.version} available`;
+        if (installBtn) installBtn.onclick = () => this.installUpdate(update);
+    }
+
+    showConfirmModal(title: string, body: string, okLabel: string, danger: boolean, onOk: () => void): void {
+        const modal = document.getElementById('confirm-modal')!;
+        document.getElementById('confirm-modal-title')!.textContent = title;
+        document.getElementById('confirm-modal-body')!.textContent = body;
+        const okBtn = document.getElementById('confirm-modal-ok') as HTMLButtonElement;
+        okBtn.textContent = okLabel;
+        okBtn.className = danger ? 'settings-btn settings-btn-danger' : 'settings-btn settings-btn-primary';
+        const cancelBtn = document.getElementById('confirm-modal-cancel')!;
+        const cleanup = () => { modal.classList.add('hidden'); okBtn.onclick = null; cancelBtn.onclick = null; };
+        okBtn.onclick = () => { cleanup(); onOk(); };
+        cancelBtn.onclick = () => cleanup();
+        modal.classList.remove('hidden');
     }
 
     async installUpdate(update: main.UpdateInfo): Promise<void> {
-        if (!confirm(`Install update ${update.version}?\nThe installer will close and restart blight automatically.`)) return;
+        this.showConfirmModal(
+            `Install update ${update.version}?`,
+            'The installer will close and restart blight automatically.',
+            'Install',
+            false,
+            async () => {
+                this._activateSettingsTab('updates');
+                this.settingsPanelEl.classList.remove('hidden');
 
-        this.showToast('Downloading update…', 'Please wait');
-        const res = await InstallUpdate();
-        if (res === 'success') {
-            this.showToast('Installing…', 'blight will restart shortly');
-        } else {
-            this.showToast('Update failed', res);
-        }
+                const bar = document.getElementById('settings-update-progress-bar');
+                const fill = document.getElementById('settings-update-progress-fill') as HTMLElement | null;
+                const text = document.getElementById('settings-update-progress-text');
+                if (bar) bar.style.display = 'block';
+                if (text) text.textContent = 'Downloading…';
+
+                const unsub = EventsOn('updateProgress', (pct: number) => {
+                    if (fill) fill.style.width = pct + '%';
+                    if (text) text.textContent = `Downloading… ${pct}%`;
+                });
+
+                const res = await InstallUpdate();
+                unsub();
+
+                if (res === 'success') {
+                    if (text) text.textContent = 'Installing — blight will restart shortly';
+                } else {
+                    if (bar) bar.style.display = 'none';
+                    if (text) text.textContent = '';
+                    this.showToast('Update failed', res);
+                }
+            }
+        );
     }
 
     showSplash(): void {
@@ -327,7 +367,6 @@ class Blight {
             if (!this.hideWhenDeactivated) return;
             if (this.isHiding) return;
             if (Date.now() - this.lastShownAt < 600) return;
-            if (!this.settingsPanelEl.classList.contains('hidden')) return;
             this.isHiding = true;
             HideWindow();
         });
@@ -828,6 +867,16 @@ class Blight {
             const versionEl = document.getElementById('settings-version');
             if (versionEl) versionEl.textContent = `v${version}`;
 
+            // Misc tab — populate dirs lazily
+            (window as any)['go']['main']['App']['GetDataDir']().then((d: string) => {
+                const el = document.getElementById('misc-data-dir');
+                if (el) el.textContent = d;
+            }).catch(() => {});
+            (window as any)['go']['main']['App']['GetInstallDir']().then((d: string) => {
+                const el = document.getElementById('misc-install-dir');
+                if (el) el.textContent = d;
+            }).catch(() => {});
+
             const indexStatus = document.getElementById('settings-index-status');
             if (indexStatus) {
                 const lastNotif = this.notifications[0];
@@ -991,6 +1040,40 @@ class Blight {
                 statusEl.textContent = status.message;
             }
         });
+
+        // Misc tab
+        const miscOpenData = document.getElementById('misc-open-data');
+        const miscOpenInstall = document.getElementById('misc-open-install');
+        const miscUninstall = document.getElementById('misc-uninstall');
+
+        if (miscOpenData) {
+            miscOpenData.addEventListener('click', async () => {
+                const dir = await (window as any)['go']['main']['App']['GetDataDir']();
+                (window as any)['go']['main']['App']['OpenFolder'](dir);
+            });
+        }
+        if (miscOpenInstall) {
+            miscOpenInstall.addEventListener('click', async () => {
+                const dir = await (window as any)['go']['main']['App']['GetInstallDir']();
+                (window as any)['go']['main']['App']['OpenFolder'](dir);
+            });
+        }
+        if (miscUninstall) {
+            miscUninstall.addEventListener('click', () => {
+                this.showConfirmModal(
+                    'Uninstall blight?',
+                    'This will permanently remove blight from your system. Your config and data in .blight will not be deleted.',
+                    'Uninstall',
+                    true,
+                    async () => {
+                        const res = await (window as any)['go']['main']['App']['Uninstall']();
+                        if (res !== 'success') {
+                            this.showToast('Uninstall failed', res.replace('not-found:', 'Uninstaller not found: ').replace('error:', ''));
+                        }
+                    }
+                );
+            });
+        }
     }
 
     _renderIndexDirs(): void {

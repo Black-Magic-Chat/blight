@@ -34,12 +34,24 @@ export function GetContextActions(arg1) {
   return window['go']['main']['App']['GetContextActions'](arg1);
 }
 
+export function GetDataDir() {
+  return window['go']['main']['App']['GetDataDir']();
+}
+
 export function GetIcon(arg1) {
   return window['go']['main']['App']['GetIcon'](arg1);
 }
 
 export function GetIndexStatus() {
   return window['go']['main']['App']['GetIndexStatus']();
+}
+
+export function GetInstallDir() {
+  return window['go']['main']['App']['GetInstallDir']();
+}
+
+export function GetStartupEnabled() {
+  return window['go']['main']['App']['GetStartupEnabled']();
 }
 
 export function GetVersion() {
@@ -62,6 +74,14 @@ export function IsSettingsMode() {
   return window['go']['main']['App']['IsSettingsMode']();
 }
 
+export function OpenFolder(arg1) {
+  return window['go']['main']['App']['OpenFolder'](arg1);
+}
+
+export function OpenFolderPicker() {
+  return window['go']['main']['App']['OpenFolderPicker']();
+}
+
 export function OpenSettingsWindow() {
   return window['go']['main']['App']['OpenSettingsWindow']();
 }
@@ -78,14 +98,6 @@ export function SaveSettings(arg1) {
   return window['go']['main']['App']['SaveSettings'](arg1);
 }
 
-export function GetStartupEnabled() {
-  return window['go']['main']['App']['GetStartupEnabled']();
-}
-
-export function OpenFolderPicker() {
-  return window['go']['main']['App']['OpenFolderPicker']();
-}
-
 export function Search(arg1) {
   return window['go']['main']['App']['Search'](arg1);
 }
@@ -96,4 +108,8 @@ export function ShowWindow() {
 
 export function ToggleWindow() {
   return window['go']['main']['App']['ToggleWindow']();
+}
+
+export function Uninstall() {
+  return window['go']['main']['App']['Uninstall']();
 }

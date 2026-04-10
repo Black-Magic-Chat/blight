@@ -87,7 +87,7 @@ func main() {
 		},
 		Windows: &windows.Options{
 			WebviewIsTransparent:              true,
-			WindowIsTranslucent:               true,
+			WindowIsTranslucent:               false,
 			DisableWindowIcon:                 false,
 			DisableFramelessWindowDecorations: true,
 			Theme:                             windows.Dark,
@@ -128,7 +128,7 @@ func runSettingsWindow(log *debug.Logger) {
 		},
 		Windows: &windows.Options{
 			WebviewIsTransparent:              true,
-			WindowIsTranslucent:               true,
+			WindowIsTranslucent:               false,
 			DisableFramelessWindowDecorations: true,
 			Theme:                             windows.Dark,
 		},
