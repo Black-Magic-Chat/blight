@@ -10,7 +10,11 @@
       "Bash(xargs wc:*)",
       "Bash(go build:*)",
       "Bash(git checkout:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(gh pr:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }
