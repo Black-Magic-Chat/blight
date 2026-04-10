@@ -2,7 +2,8 @@ import {
     IsFirstRun, IsSettingsMode, CompleteOnboarding, Search, Execute, HideWindow,
     GetContextActions, ExecuteContextAction, CheckForUpdates, InstallUpdate,
     GetIcon, GetConfig, SaveSettings, GetVersion, ReindexFiles, ClearIndex,
-    CloseSettings, GetStartupEnabled, OpenFolderPicker
+    CloseSettings, GetStartupEnabled, OpenFolderPicker,
+    GetDataDir, GetInstallDir, OpenFolder, Uninstall, CancelIndex
 } from '../wailsjs/go/main/App';
 import { EventsOn } from '../wailsjs/runtime/runtime';
 import { main, files } from '../wailsjs/go/models';
@@ -847,11 +848,11 @@ class Blight {
             if (versionEl) versionEl.textContent = `v${version}`;
 
             // Misc tab — populate dirs lazily
-            (window as any)['go']['main']['App']['GetDataDir']().then((d: string) => {
+            GetDataDir().then(d => {
                 const el = document.getElementById('misc-data-dir');
                 if (el) el.textContent = d;
             }).catch(() => {});
-            (window as any)['go']['main']['App']['GetInstallDir']().then((d: string) => {
+            GetInstallDir().then(d => {
                 const el = document.getElementById('misc-install-dir');
                 if (el) el.textContent = d;
             }).catch(() => {});
@@ -945,7 +946,7 @@ class Blight {
         }
         if (cancelIndexBtn) {
             cancelIndexBtn.addEventListener('click', () => {
-                (window as any)['go']['main']['App']['CancelIndex']();
+                CancelIndex();
             });
         }
 
@@ -1036,14 +1037,14 @@ class Blight {
 
         if (miscOpenData) {
             miscOpenData.addEventListener('click', async () => {
-                const dir = await (window as any)['go']['main']['App']['GetDataDir']();
-                (window as any)['go']['main']['App']['OpenFolder'](dir);
+                const dir = await GetInstallDir();
+                OpenFolder(dir);
             });
         }
         if (miscOpenInstall) {
             miscOpenInstall.addEventListener('click', async () => {
-                const dir = await (window as any)['go']['main']['App']['GetInstallDir']();
-                (window as any)['go']['main']['App']['OpenFolder'](dir);
+                const dir = await GetInstallDir();
+                OpenFolder(dir);
             });
         }
         if (miscUninstall) {
@@ -1054,7 +1055,7 @@ class Blight {
                     'Uninstall',
                     true,
                     async () => {
-                        const res = await (window as any)['go']['main']['App']['Uninstall']();
+                        const res = await Uninstall();
                         if (res !== 'success') {
                             this.showToast('Uninstall failed', res.replace('not-found:', 'Uninstaller not found: ').replace('error:', ''));
                         }
