@@ -2,7 +2,7 @@ import {
     GetConfig, SaveSettings, GetVersion, GetStartupEnabled,
     GetDataDir, GetInstallDir, OpenFolder, OpenFolderPicker,
     ReindexFiles, ClearIndex, CancelIndex,
-    CheckForUpdates, InstallUpdate,
+    CheckForUpdates,
     Uninstall, CloseSettings,
     ExportSettings, ImportSettings,
     GetAliases, SaveAlias, DeleteAlias,
