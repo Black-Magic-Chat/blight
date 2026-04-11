@@ -41,6 +41,7 @@ export namespace main {
 	    hideNotifyIcon: boolean;
 	    // Go type: time
 	    lastIndexedAt?: any;
+	    disableFolderIndex?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new BlightConfig(source);
@@ -64,6 +65,7 @@ export namespace main {
 	        this.startOnStartup = source["startOnStartup"];
 	        this.hideNotifyIcon = source["hideNotifyIcon"];
 	        this.lastIndexedAt = this.convertValues(source["lastIndexedAt"], null);
+	        this.disableFolderIndex = source["disableFolderIndex"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

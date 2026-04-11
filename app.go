@@ -74,6 +74,9 @@ type BlightConfig struct {
 	StartOnStartup bool      `json:"startOnStartup"` // add to Windows startup, default false
 	HideNotifyIcon bool      `json:"hideNotifyIcon"`  // hide system tray icon, default false
 	LastIndexedAt  time.Time `json:"lastIndexedAt,omitempty"`
+
+	// File index behaviour
+	DisableFolderIndex bool `json:"disableFolderIndex,omitempty"` // exclude folders from search results, default false
 }
 
 type App struct {
@@ -461,6 +464,7 @@ func (a *App) SaveSettings(cfg BlightConfig) error {
 	a.config.UseAnimation = cfg.UseAnimation
 	a.config.ShowPlaceholder = cfg.ShowPlaceholder
 	a.config.HideNotifyIcon = cfg.HideNotifyIcon
+	a.config.DisableFolderIndex = cfg.DisableFolderIndex
 
 	// System startup: sync Windows registry
 	if cfg.StartOnStartup != a.config.StartOnStartup {
@@ -509,6 +513,11 @@ func (a *App) Search(query string) []SearchResult {
 		return a.getDefaultResults()
 	}
 
+	// Path-browser mode: ~ or any absolute path prefix triggers live dir listing.
+	if strings.HasPrefix(query, "~") || isAbsPath(query) {
+		return a.searchPath(query)
+	}
+
 	var results []SearchResult
 
 	// URL detection: if the query looks like a URL, offer to open it directly.
@@ -519,18 +528,6 @@ func (a *App) Search(query string) []SearchResult {
 			Subtitle: query,
 			Icon:     "",
 			Category: "Web",
-		})
-	}
-
-	// Path detection: if query looks like a Windows file path, offer to open it.
-	if isFilePath(query) {
-		results = append(results, SearchResult{
-			ID:       "file-open:" + query,
-			Title:    filepath.Base(query),
-			Subtitle: "Open: " + query,
-			Icon:     "",
-			Category: "Files",
-			Path:     query,
 		})
 	}
 
@@ -571,6 +568,7 @@ func (a *App) Search(query string) []SearchResult {
 
 	results = append(results, a.searchSystemCommands(query)...)
 	results = append(results, a.searchApps(query)...)
+	results = append(results, a.searchDirs(query)...)
 	results = append(results, a.searchFiles(query)...)
 
 	if len(results) == 0 {
@@ -655,6 +653,14 @@ func (a *App) Execute(id string) string {
 		return "ok"
 	}
 
+	if strings.HasPrefix(id, "dir-open:") {
+		dirPath := strings.TrimPrefix(id, "dir-open:")
+		shellOpen(dirPath)
+		runtime.WindowHide(a.ctx)
+		a.visible.Store(false)
+		return "ok"
+	}
+
 	allApps := a.scanner.Apps()
 	for _, app := range allApps {
 		if app.Name == id {
@@ -671,6 +677,12 @@ func (a *App) Execute(id string) string {
 
 func (a *App) GetContextActions(id string) []ContextAction {
 	switch {
+	case strings.HasPrefix(id, "dir-open:"):
+		return []ContextAction{
+			{ID: "open", Label: "Open", Icon: "▶"},
+			{ID: "terminal", Label: "Open in Terminal", Icon: "⌨"},
+			{ID: "copy-path", Label: "Copy Path", Icon: "📋"},
+		}
 	case strings.HasPrefix(id, "file-open:"):
 		return []ContextAction{
 			{ID: "open", Label: "Open", Icon: "▶"},
@@ -701,6 +713,25 @@ func (a *App) GetContextActions(id string) []ContextAction {
 }
 
 func (a *App) ExecuteContextAction(resultID string, actionID string) string {
+	// Folders
+	if strings.HasPrefix(resultID, "dir-open:") {
+		dirPath := strings.TrimPrefix(resultID, "dir-open:")
+		switch actionID {
+		case "open":
+			shellOpen(dirPath)
+			runtime.WindowHide(a.ctx)
+			a.visible.Store(false)
+			return "ok"
+		case "terminal":
+			openInTerminal(dirPath)
+			return "ok"
+		case "copy-path":
+			runtime.ClipboardSetText(a.ctx, dirPath)
+			return "ok"
+		}
+		return "unknown action"
+	}
+
 	// Files
 	if strings.HasPrefix(resultID, "file-open:") {
 		filePath := strings.TrimPrefix(resultID, "file-open:")
@@ -867,6 +898,39 @@ func (a *App) searchFiles(query string) []SearchResult {
 	return results
 }
 
+func (a *App) searchDirs(query string) []SearchResult {
+	if len(query) < 2 || a.config.DisableFolderIndex {
+		return nil
+	}
+
+	status := a.fileIdx.Status()
+	if status.State != "ready" {
+		return nil
+	}
+
+	dirResults := a.fileIdx.SearchDirs(query)
+	limit := a.maxResults() / 2
+	if limit < 3 {
+		limit = 3
+	}
+	if len(dirResults) > limit {
+		dirResults = dirResults[:limit]
+	}
+
+	var results []SearchResult
+	for _, d := range dirResults {
+		results = append(results, SearchResult{
+			ID:       "dir-open:" + d.Path,
+			Title:    d.Name,
+			Subtitle: prettifyPath(d.Path),
+			Icon:     "",
+			Category: "Folders",
+			Path:     d.Path,
+		})
+	}
+	return results
+}
+
 func (a *App) searchSystemCommands(query string) []SearchResult {
 	queryLower := strings.ToLower(query)
 	var results []SearchResult
@@ -975,6 +1039,100 @@ func (a *App) getDefaultResults() []SearchResult {
 	return results
 }
 
+// searchPath handles path-browser mode. Triggered by queries starting with ~
+// or any absolute path prefix (C:\, /, \\, etc.). The query is parsed as a
+// filesystem path; the final segment (after the last separator) is used as a
+// filter against the parent directory's contents.
+//
+//	~             → list home dir
+//	~/doc         → list home dir, entries containing "doc"
+//	~/Documents/  → list ~/Documents/
+//	C:\Users\     → list C:\Users\
+//	C:\Users\foo  → list C:\Users\, entries containing "foo"
+func (a *App) searchPath(query string) []SearchResult {
+	home, _ := os.UserHomeDir()
+
+	// Expand ~ to the home directory.
+	expanded := filepath.FromSlash(query)
+	if strings.HasPrefix(expanded, "~") {
+		expanded = home + expanded[1:]
+	}
+
+	// Determine searchDir and filter:
+	// - If the query ends with a separator, list the directory as-is.
+	// - Otherwise, the last path segment is the filter and its parent is the dir.
+	var searchDir, filter string
+	last := expanded[len(expanded)-1]
+	if last == filepath.Separator || last == '/' {
+		searchDir = filepath.Clean(expanded)
+		filter = ""
+	} else {
+		searchDir = filepath.Dir(expanded)
+		filter = filepath.Base(expanded)
+		// filepath.Dir of a bare drive like "C:" returns "C:"; treat as root.
+		if searchDir == "." {
+			searchDir = home
+		}
+	}
+
+	entries, err := os.ReadDir(searchDir)
+	if err != nil {
+		return []SearchResult{{
+			ID:       "no-results",
+			Title:    "Directory not found",
+			Subtitle: prettifyPath(searchDir),
+			Category: "Files",
+		}}
+	}
+
+	filterLower := strings.ToLower(filter)
+	limit := a.maxResults() * 2
+
+	// Dirs first, then files.
+	var dirs, fileResults []SearchResult
+	for _, entry := range entries {
+		if len(dirs)+len(fileResults) >= limit {
+			break
+		}
+		name := entry.Name()
+		if strings.HasPrefix(name, ".") {
+			continue // skip hidden entries
+		}
+		if filterLower != "" && !strings.Contains(strings.ToLower(name), filterLower) {
+			continue
+		}
+		path := filepath.Join(searchDir, name)
+		if entry.IsDir() {
+			dirs = append(dirs, SearchResult{
+				ID:       "dir-open:" + path,
+				Title:    name,
+				Subtitle: prettifyPath(path),
+				Category: "Folders",
+				Path:     path,
+			})
+		} else {
+			fileResults = append(fileResults, SearchResult{
+				ID:       "file-open:" + path,
+				Title:    name,
+				Subtitle: prettifyPath(searchDir),
+				Category: "Files",
+				Path:     path,
+			})
+		}
+	}
+
+	results := append(dirs, fileResults...)
+	if len(results) == 0 {
+		return []SearchResult{{
+			ID:       "no-results",
+			Title:    "No matches in " + prettifyPath(searchDir),
+			Subtitle: "Try a different name",
+			Category: "Files",
+		}}
+	}
+	return results
+}
+
 func prettifyPath(path string) string {
 	home, _ := os.UserHomeDir()
 	if strings.HasPrefix(path, home) {
@@ -991,13 +1149,23 @@ func isURL(s string) bool {
 		strings.HasPrefix(sl, "ftp://")
 }
 
-// isFilePath returns true if s looks like a Windows absolute path or UNC path.
-func isFilePath(s string) bool {
-	if len(s) >= 3 && s[1] == ':' && (s[2] == '\\' || s[2] == '/') {
-		return true // e.g. C:\foo
+// isAbsPath returns true if s looks like an absolute filesystem path on any
+// supported platform: Windows drive paths (C:\, C:/), UNC paths (\\server\),
+// and Unix-style absolute paths (/home/...).
+func isAbsPath(s string) bool {
+	if len(s) >= 2 && s[1] == ':' {
+		return true // Windows drive: C:\ or C:/
 	}
-	if strings.HasPrefix(s, `\\`) {
-		return true // UNC path
+	if strings.HasPrefix(s, `\\`) || strings.HasPrefix(s, "//") {
+		return true // UNC / network path
+	}
+	if strings.HasPrefix(s, "/") {
+		return true // Unix absolute path
 	}
 	return false
+}
+
+// isFilePath is kept for backward compatibility; delegates to isAbsPath.
+func isFilePath(s string) bool {
+	return isAbsPath(s)
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"unsafe"
 )
@@ -29,6 +30,39 @@ func explorerSelect(path string) {
 	arg, _ := syscall.UTF16PtrFromString("/select," + path)
 	explorer, _ := syscall.UTF16PtrFromString("explorer.exe")
 	procShellExecute.Call(0, 0, uintptr(unsafe.Pointer(explorer)), uintptr(unsafe.Pointer(arg)), 0, 1)
+}
+
+var (
+	wtOnce sync.Once
+	wtPath string
+)
+
+func detectWindowsTerminal() string {
+	wtOnce.Do(func() {
+		local, _ := os.UserCacheDir()
+		candidate := filepath.Join(local, "Microsoft", "WindowsApps", "wt.exe")
+		if _, err := os.Stat(candidate); err == nil {
+			wtPath = candidate
+			return
+		}
+		if p, err := exec.LookPath("wt"); err == nil {
+			wtPath = p
+		}
+	})
+	return wtPath
+}
+
+func openInTerminal(dir string) {
+	wt := detectWindowsTerminal()
+	if wt != "" {
+		wtPtr, _ := syscall.UTF16PtrFromString(wt)
+		argsPtr, _ := syscall.UTF16PtrFromString(fmt.Sprintf(`-d "%s"`, dir))
+		procShellExecute.Call(0, 0, uintptr(unsafe.Pointer(wtPtr)), uintptr(unsafe.Pointer(argsPtr)), 0, 1)
+		return
+	}
+	cmdPtr, _ := syscall.UTF16PtrFromString("cmd.exe")
+	argsPtr, _ := syscall.UTF16PtrFromString(fmt.Sprintf(`/k cd /d "%s"`, dir))
+	procShellExecute.Call(0, 0, uintptr(unsafe.Pointer(cmdPtr)), uintptr(unsafe.Pointer(argsPtr)), 0, 1)
 }
 
 func blightInstallDir() string {

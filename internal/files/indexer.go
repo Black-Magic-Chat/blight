@@ -17,11 +17,12 @@ import (
 const maxIndexFiles = 500_000
 
 type FileEntry struct {
-	Name string
-	Path string
-	Dir  string
-	Ext  string
-	Size int64
+	Name  string
+	Path  string
+	Dir   string
+	Ext   string
+	Size  int64
+	IsDir bool
 }
 
 type IndexStatus struct {
@@ -35,6 +36,8 @@ type FileIndex struct {
 	mu          sync.RWMutex
 	files       []FileEntry
 	names       []string
+	dirs        []FileEntry
+	dirNames    []string
 	status      atomic.Value
 	lastIndexed atomic.Value // stores time.Time
 	cancelFn    atomic.Value // stores context.CancelFunc
@@ -92,6 +95,8 @@ func (idx *FileIndex) ClearIndex() {
 	idx.mu.Lock()
 	idx.files = nil
 	idx.names = nil
+	idx.dirs = nil
+	idx.dirNames = nil
 	idx.mu.Unlock()
 	idx.setStatus(IndexStatus{State: "idle", Message: "Index cleared"})
 }
@@ -162,6 +167,7 @@ func (idx *FileIndex) manualIndex(ctx context.Context) {
 	}
 
 	var allFiles []FileEntry
+	var allDirs []FileEntry
 	count := 0
 	total := 0
 
@@ -195,6 +201,14 @@ func (idx *FileIndex) manualIndex(ctx context.Context) {
 			if d.IsDir() {
 				if shouldSkipDir(name) {
 					return filepath.SkipDir
+				}
+				if path != dir {
+					allDirs = append(allDirs, FileEntry{
+						Name:  name,
+						Path:  path,
+						Dir:   filepath.Dir(path),
+						IsDir: true,
+					})
 				}
 				return nil
 			}
@@ -243,13 +257,20 @@ func (idx *FileIndex) manualIndex(ctx context.Context) {
 		names[i] = f.Name
 	}
 
+	dirNames := make([]string, len(allDirs))
+	for i, d := range allDirs {
+		dirNames[i] = d.Name
+	}
+
 	idx.mu.Lock()
 	idx.files = allFiles
 	idx.names = names
+	idx.dirs = allDirs
+	idx.dirNames = dirNames
 	idx.mu.Unlock()
 
 	elapsed := time.Since(start).Round(time.Millisecond)
-	msg := fmt.Sprintf("%d files indexed in %s", count, elapsed)
+	msg := fmt.Sprintf("%d files, %d folders indexed in %s", count, len(allDirs), elapsed)
 	idx.lastIndexed.Store(time.Now())
 	idx.setStatus(IndexStatus{
 		State:   "ready",
@@ -279,6 +300,31 @@ func (idx *FileIndex) SearchFiles(query string) []FileEntry {
 			break
 		}
 		results = append(results, allFiles[m.Index])
+	}
+
+	return results
+}
+
+// SearchDirs performs fuzzy matching against the local index directory names.
+func (idx *FileIndex) SearchDirs(query string) []FileEntry {
+	if query == "" {
+		return nil
+	}
+
+	idx.mu.RLock()
+	names := idx.dirNames
+	allDirs := idx.dirs
+	idx.mu.RUnlock()
+
+	emptyScores := make([]int, len(names))
+	matches := search.Fuzzy(strings.ToLower(query), names, emptyScores)
+
+	var results []FileEntry
+	for _, m := range matches {
+		if len(results) >= 8 {
+			break
+		}
+		results = append(results, allDirs[m.Index])
 	}
 
 	return results

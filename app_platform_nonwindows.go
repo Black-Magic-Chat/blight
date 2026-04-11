@@ -35,6 +35,21 @@ func explorerSelect(path string) {
 	_ = exec.Command("xdg-open", filepath.Dir(path)).Start()
 }
 
+func openInTerminal(dir string) {
+	switch runtime.GOOS {
+	case "darwin":
+		script := fmt.Sprintf(`tell application "Terminal" to do script "cd %q"`, dir)
+		_ = exec.Command("osascript", "-e", script).Start()
+	default:
+		for _, term := range []string{"gnome-terminal", "x-terminal-emulator", "konsole", "xterm"} {
+			if p, err := exec.LookPath(term); err == nil {
+				_ = exec.Command(p, "--working-directory="+dir).Start()
+				return
+			}
+		}
+	}
+}
+
 func runAsAdmin(path string) error {
 	switch runtime.GOOS {
 	case "darwin":

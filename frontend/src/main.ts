@@ -443,6 +443,8 @@ class Blight {
             } else {
                 this.showToast(`Launched ${result.title}`, result.path || '');
             }
+        } else if (response && response !== 'ok' && response !== 'copied') {
+            this.showToast('Action failed', response);
         }
     }
 
@@ -457,6 +459,7 @@ class Blight {
     }
 
     getSecondaryActionId(resultId: string): string | null {
+        if (resultId.startsWith('dir-open:')) return 'terminal';
         if (resultId.startsWith('file-open:')) return 'explorer';
         if (resultId.startsWith('clip-')) return 'copy';
         if (resultId.startsWith('sys-')) return null;
@@ -466,6 +469,7 @@ class Blight {
     }
 
     getSecondaryActionLabel(resultId: string): string {
+        if (resultId.startsWith('dir-open:')) return 'Open in Terminal';
         if (resultId.startsWith('file-open:')) return 'Show in Explorer';
         if (resultId.startsWith('clip-')) return 'Copy';
         return 'Run as Admin';
@@ -843,6 +847,10 @@ class Blight {
             const hideNotifyIcon = inputEl('settings-hide-notify-icon');
             if (hideNotifyIcon) hideNotifyIcon.checked = !!config.hideNotifyIcon;
 
+            // Files tab
+            const includeFolders = inputEl('settings-include-folders');
+            if (includeFolders) includeFolders.checked = !config.disableFolderIndex;
+
             // Updates tab
             const versionEl = document.getElementById('settings-version');
             if (versionEl) versionEl.textContent = `v${version}`;
@@ -917,6 +925,7 @@ class Blight {
                     useAnimation: inputEl('settings-use-animation')?.checked ?? true,
                     startOnStartup: inputEl('settings-start-on-startup')?.checked ?? false,
                     hideNotifyIcon: inputEl('settings-hide-notify-icon')?.checked ?? false,
+                    disableFolderIndex: !(inputEl('settings-include-folders')?.checked ?? true),
                     indexDirs: this._currentIndexDirs,
                 };
                 try {
@@ -1099,6 +1108,11 @@ class Blight {
                 <rect x="13" y="5" width="6" height="6" rx="1.5" fill="rgba(255,255,255,0.15)"/>
                 <rect x="5" y="13" width="6" height="6" rx="1.5" fill="rgba(255,255,255,0.15)"/>
                 <rect x="13" y="13" width="6" height="6" rx="1.5" fill="rgba(255,255,255,0.1)"/>
+            </svg>`;
+        }
+        if (c === 'folders') {
+            return `<svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" fill="rgba(255,200,80,0.12)" stroke="rgba(255,200,80,0.35)" stroke-width="1.5"/>
             </svg>`;
         }
         if (c === 'files') {
