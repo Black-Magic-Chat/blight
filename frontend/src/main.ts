@@ -10,6 +10,10 @@ import {
     fluentSelect,
     fluentOption,
     fluentTextField,
+    baseLayerLuminance,
+    StandardLuminance,
+    accentBaseColor,
+    SwatchRGB,
 } from '@fluentui/web-components';
 import { EventsOn } from '../wailsjs/runtime/runtime';
 import { main, files } from '../wailsjs/go/models';
@@ -136,7 +140,16 @@ class Blight {
         const os = /Win/i.test(ua) ? 'windows' : /Mac/i.test(ua) ? 'darwin' : 'linux';
         document.documentElement.dataset.os = os;
 
-        // Register Fluent UI web components on all platforms.
+        // Initialise the Fluent design system with dark/light mode and accent.
+        // These two tokens drive ALL component colors — no manual color overrides needed.
+        baseLayerLuminance.withDefault(
+            window.matchMedia('(prefers-color-scheme: light)').matches
+                ? StandardLuminance.LightMode
+                : StandardLuminance.DarkMode
+        );
+        // Blight accent: #5C9AFF  → r=0.361 g=0.604 b=1.0
+        accentBaseColor.withDefault(SwatchRGB.create(0.361, 0.604, 1.0));
+
         provideFluentDesignSystem().register(
             fluentButton(),
             fluentSwitch(),

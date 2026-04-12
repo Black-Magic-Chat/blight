@@ -1666,7 +1666,9 @@ html.no-animations *::after {
    inherited from the surrounding CSS variables.
    ============================================================ */
 
-/* --- fluent-button --- */
+/* --- fluent-button ---
+   Colors come from the Fluent design token system (set in main.ts via
+   baseLayerLuminance + accentBaseColor). We only override geometry here. */
 
 fluent-button {
     display: inline-flex;
@@ -1679,112 +1681,45 @@ fluent-button::part(control) {
     font-family: var(--font);
     font-size: 12px;
     font-weight: 500;
-    padding: 5px 12px;
+    padding: 4px 12px;
     min-height: 28px;
     height: auto;
     border-radius: var(--radius-sm);
     cursor: pointer;
     white-space: nowrap;
     letter-spacing: 0;
-    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 
-/* neutral appearance */
-fluent-button[appearance="neutral"]::part(control) {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-strong);
-    color: var(--text-secondary);
-}
-
-fluent-button[appearance="neutral"]:hover::part(control) {
-    background: var(--bg-tertiary);
-    border-color: rgba(255, 255, 255, 0.16);
-    color: var(--text-primary);
-}
-
-fluent-button[appearance="neutral"]:active::part(control) {
-    background: var(--bg-secondary);
-}
-
-/* accent / primary appearance */
-fluent-button[appearance="accent"]::part(control) {
-    background: var(--accent);
-    border: 1px solid transparent;
-    color: #fff;
-}
-
-fluent-button[appearance="accent"]:hover::part(control) {
-    filter: brightness(1.10);
-}
-
-fluent-button[appearance="accent"]:active::part(control) {
-    filter: brightness(0.92);
-}
-
-/* danger modifier */
+/* danger modifier — only override text color, keep Fluent surface colors */
 fluent-button.fluent-danger::part(control) {
     color: #f87171;
 }
 
 fluent-button.fluent-danger:hover::part(control) {
     color: #fca5a5;
-    background: rgba(248, 113, 113, 0.08);
-    border-color: rgba(248, 113, 113, 0.18);
 }
 
-/* disabled state */
-fluent-button[disabled]::part(control) {
-    opacity: 0.38;
-    cursor: not-allowed;
-    pointer-events: none;
-}
-
-/* --- fluent-switch --- */
+/* --- fluent-switch ---
+   Colors driven by Fluent tokens. We only override size/shape. */
 
 fluent-switch {
     display: inline-flex;
     align-items: center;
     cursor: pointer;
-    --switch-height: 20px;
-    --switch-width: 36px;
 }
 
-/* Hide the auto-generated label text */
 fluent-switch::part(label) {
     display: none;
 }
 
 fluent-switch::part(switch) {
-    width: var(--switch-width, 36px);
-    height: var(--switch-height, 20px);
+    width: 36px;
+    height: 20px;
     border-radius: 10px;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-strong);
-    box-sizing: border-box;
-    transition: background var(--transition-normal), border-color var(--transition-normal);
-    position: relative;
-}
-
-fluent-switch[aria-checked="true"]::part(switch) {
-    background: var(--accent);
-    border-color: var(--accent);
 }
 
 fluent-switch::part(checked-indicator) {
-    width: 14px;
-    height: 14px;
     border-radius: 50%;
-    background: var(--text-tertiary);
-    position: absolute;
-    top: 50%;
-    left: 2px;
-    transform: translateY(-50%);
-    transition: transform var(--transition-normal), background var(--transition-normal);
-}
-
-fluent-switch[aria-checked="true"]::part(checked-indicator) {
-    background: #fff;
-    transform: translateX(16px) translateY(-50%);
 }
 
 /* ============================================================
@@ -1922,30 +1857,6 @@ fluent-switch[aria-checked="true"]::part(checked-indicator) {
 [data-os="windows"] .settings-body::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.14);
     border-radius: 1px;
-}
-
-/* --- Fluent Web Components token overrides ---
-   @fluentui/web-components uses CSS custom properties on :root.
-   We remap them to match the blight accent and surface colors. */
-
-[data-os="windows"] {
-    --neutral-fill-rest:           rgba(255,255,255,0.055);
-    --neutral-fill-hover:          rgba(255,255,255,0.082);
-    --neutral-fill-active:         rgba(255,255,255,0.035);
-    --neutral-stroke-rest:         rgba(255,255,255,0.09);
-    --neutral-stroke-hover:        rgba(255,255,255,0.13);
-    --accent-fill-rest:            #5C9AFF;
-    --accent-fill-hover:           #74AAFF;
-    --accent-fill-active:          #4A87EE;
-    --accent-foreground-rest:      #fff;
-    --neutral-foreground-rest:     #FFFFFF;
-    --neutral-foreground-hint:     #8E8E93;
-    --neutral-layer-1:             #202022;
-    --neutral-layer-2:             #2c2c2e;
-    --density:                     0;
-    --design-unit:                 4;
-    --corner-radius:               4;
-    --focus-stroke-outer:          #5C9AFF;
 }
 
 /* --- Splash button --- */
