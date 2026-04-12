@@ -552,17 +552,42 @@ class Blight {
         const list = this._displayResults.length > 0 ? this._displayResults : this.results;
         if (list.length === 0) return;
         const items = this.resultsContainer.querySelectorAll<HTMLElement>('.result-item');
-        if (items.length === 0) return;
+        // Guard: DOM might not match list if a re-render is in flight
+        if (items.length === 0 || items.length !== list.length) return;
+
+        // Remove selected from current item
         items[this.selectedIndex]?.classList.remove('selected');
         items[this.selectedIndex]?.setAttribute('aria-selected', 'false');
+
         this.selectedIndex = (this.selectedIndex + delta + list.length) % list.length;
+
         const next = items[this.selectedIndex];
         if (next) {
             next.classList.add('selected');
             next.setAttribute('aria-selected', 'true');
-            next.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            this._scrollItemIntoView(next);
         }
+
+        // Suppress CSS :hover while keyboard-navigating; re-enable on mouse move
+        this.resultsContainer.classList.add('keyboard-nav');
+
         this.updateFooterHints(list[this.selectedIndex] ?? null);
+    }
+
+    /** Scroll the item into view without smooth animation (avoids queued-scroll
+     *  jumps when the user holds down an arrow key). */
+    private _scrollItemIntoView(item: HTMLElement): void {
+        const container = this.resultsContainer;
+        const containerTop = container.scrollTop;
+        const containerBottom = containerTop + container.clientHeight;
+        const itemTop = item.offsetTop;
+        const itemBottom = itemTop + item.offsetHeight;
+
+        if (itemBottom > containerBottom) {
+            container.scrollTop = itemBottom - container.clientHeight + 4;
+        } else if (itemTop < containerTop) {
+            container.scrollTop = itemTop - 4;
+        }
     }
 
     async executeSelected(): Promise<void> {
