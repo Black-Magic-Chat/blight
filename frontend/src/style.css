@@ -1660,6 +1660,134 @@ html.no-animations *::after {
 }
 
 /* ============================================================
+   FLUENT WEB COMPONENTS — cross-platform baseline
+   Styles applied via ::part() so they work regardless of OS.
+   Design tokens (--accent, --bg-*, --text-*, --radius-*) are
+   inherited from the surrounding CSS variables.
+   ============================================================ */
+
+/* --- fluent-button --- */
+
+fluent-button {
+    display: inline-flex;
+    align-items: center;
+}
+
+fluent-button.hidden { display: none; }
+
+fluent-button::part(control) {
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 5px 12px;
+    min-height: 28px;
+    height: auto;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    white-space: nowrap;
+    letter-spacing: 0;
+    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+
+/* neutral appearance */
+fluent-button[appearance="neutral"]::part(control) {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-strong);
+    color: var(--text-secondary);
+}
+
+fluent-button[appearance="neutral"]:hover::part(control) {
+    background: var(--bg-tertiary);
+    border-color: rgba(255, 255, 255, 0.16);
+    color: var(--text-primary);
+}
+
+fluent-button[appearance="neutral"]:active::part(control) {
+    background: var(--bg-secondary);
+}
+
+/* accent / primary appearance */
+fluent-button[appearance="accent"]::part(control) {
+    background: var(--accent);
+    border: 1px solid transparent;
+    color: #fff;
+}
+
+fluent-button[appearance="accent"]:hover::part(control) {
+    filter: brightness(1.10);
+}
+
+fluent-button[appearance="accent"]:active::part(control) {
+    filter: brightness(0.92);
+}
+
+/* danger modifier */
+fluent-button.fluent-danger::part(control) {
+    color: #f87171;
+}
+
+fluent-button.fluent-danger:hover::part(control) {
+    color: #fca5a5;
+    background: rgba(248, 113, 113, 0.08);
+    border-color: rgba(248, 113, 113, 0.18);
+}
+
+/* disabled state */
+fluent-button[disabled]::part(control) {
+    opacity: 0.38;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* --- fluent-switch --- */
+
+fluent-switch {
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    --switch-height: 20px;
+    --switch-width: 36px;
+}
+
+/* Hide the auto-generated label text */
+fluent-switch::part(label) {
+    display: none;
+}
+
+fluent-switch::part(switch) {
+    width: var(--switch-width, 36px);
+    height: var(--switch-height, 20px);
+    border-radius: 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-strong);
+    box-sizing: border-box;
+    transition: background var(--transition-normal), border-color var(--transition-normal);
+    position: relative;
+}
+
+fluent-switch[aria-checked="true"]::part(switch) {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+fluent-switch::part(checked-indicator) {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--text-tertiary);
+    position: absolute;
+    top: 50%;
+    left: 2px;
+    transform: translateY(-50%);
+    transition: transform var(--transition-normal), background var(--transition-normal);
+}
+
+fluent-switch[aria-checked="true"]::part(checked-indicator) {
+    background: #fff;
+    transform: translateX(16px) translateY(-50%);
+}
+
+/* ============================================================
    WINDOWS 11 — Fluent Design System
    Mica backdrop (main.go) sits behind the WebView.
    Only the launcher chrome is translucent — overlays/panels

@@ -136,16 +136,14 @@ class Blight {
         const os = /Win/i.test(ua) ? 'windows' : /Mac/i.test(ua) ? 'darwin' : 'linux';
         document.documentElement.dataset.os = os;
 
-        // Register Fluent UI web components on Windows (WinUI3 design tokens).
-        if (os === 'windows') {
-            provideFluentDesignSystem().register(
-                fluentButton(),
-                fluentSwitch(),
-                fluentSelect(),
-                fluentOption(),
-                fluentTextField(),
-            );
-        }
+        // Register Fluent UI web components on all platforms.
+        provideFluentDesignSystem().register(
+            fluentButton(),
+            fluentSwitch(),
+            fluentSelect(),
+            fluentOption(),
+            fluentTextField(),
+        );
 
         const settingsMode = await IsSettingsMode();
         if (settingsMode) {
