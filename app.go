@@ -1377,4 +1377,3 @@ func isAbsPath(s string) bool {
 	}
 	return false
 }
-
