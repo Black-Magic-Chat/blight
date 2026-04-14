@@ -710,7 +710,7 @@ class Blight {
 
     getSecondaryActionId(resultId: string): string | null {
         if (resultId.startsWith('dir-open:')) return 'terminal';
-        if (resultId.startsWith('file-open:')) return null;
+        if (resultId.startsWith('file-open:')) return 'explorer';
         if (resultId.startsWith('clip-')) return 'copy';
         if (
             resultId.startsWith('sys-') ||
@@ -778,7 +778,8 @@ class Blight {
             return;
         }
         const secondaryLabel = this.getSecondaryActionLabel(result.id);
-        const hasSecondary = this.getSecondaryActionId(result.id) !== null;
+        const secondaryId = this.getSecondaryActionId(result.id);
+        const hasSecondary = secondaryId !== null && secondaryId !== 'explorer';
         if (hasSecondary) {
             secondaryHint.innerHTML = `<kbd>Ctrl+↵</kbd> ${escapeHtml(secondaryLabel)}`;
             secondaryHint.classList.remove('hidden');
