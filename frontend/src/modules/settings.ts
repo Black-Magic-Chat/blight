@@ -18,6 +18,7 @@ import {
     GetAliases,
     SaveAlias,
     DeleteAlias,
+    OpenURL,
 } from '../../wailsjs/go/main/App';
 import { marked, Renderer } from 'marked';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
@@ -310,6 +311,24 @@ export class Settings {
             });
         }
 
+        // Updates tab – open external links in the default browser via the backend
+        document.querySelectorAll<HTMLAnchorElement>('.update-res-link, .update-res-github').forEach((a) => {
+            a.addEventListener('click', (e) => {
+                e.preventDefault();
+                const url = a.href;
+                if (url) OpenURL(url);
+            });
+        });
+        // Release notes: event delegation for dynamically-rendered rn-link anchors
+        document.getElementById('settings-update-notes')?.addEventListener('click', (e) => {
+            const target = (e.target as HTMLElement).closest<HTMLAnchorElement>('a.rn-link');
+            if (target) {
+                e.preventDefault();
+                const url = target.href;
+                if (url) OpenURL(url);
+            }
+        });
+
         // Misc tab
         document.getElementById('misc-open-data')?.addEventListener('click', async () => {
             const dir = await GetInstallDir();
@@ -413,7 +432,12 @@ export class Settings {
         if (label) label.textContent = `v${update.version}`;
         if (notesEl) notesEl.innerHTML = this._renderReleaseNotes(update.notes);
         if (githubLink) {
-            githubLink.href = `https://github.com/devatblight/blight/releases/tag/v${update.version}`;
+            const releaseUrl = `https://github.com/devatblight/blight/releases/tag/v${update.version}`;
+            githubLink.href = releaseUrl;
+            githubLink.onclick = (e) => {
+                e.preventDefault();
+                OpenURL(releaseUrl);
+            };
         }
         if (installBtn) installBtn.onclick = onInstall;
     }
