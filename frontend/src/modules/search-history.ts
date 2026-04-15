@@ -8,6 +8,7 @@ export class SearchHistory {
     private searchInputEl: HTMLInputElement;
     private onSelect: (query: string) => void;
     private history: string[];
+    private highlightedIndex = -1;
 
     constructor(
         containerEl: HTMLElement,
@@ -31,6 +32,56 @@ export class SearchHistory {
             this.containerEl.classList.add('hidden');
             return;
         }
+        this.highlightedIndex = -1;
+        this._render();
+        this.containerEl.classList.remove('hidden');
+
+        this.searchInputEl.setAttribute('aria-expanded', 'true');
+    }
+
+    hide(): void {
+        this.highlightedIndex = -1;
+        this.containerEl.classList.add('hidden');
+        this.searchInputEl.setAttribute('aria-expanded', 'false');
+    }
+
+    isVisible(): boolean {
+        return !this.containerEl.classList.contains('hidden');
+    }
+
+    /** Move highlight down; returns true if the history dropdown consumed the event. */
+    navigateDown(): boolean {
+        if (!this.isVisible()) return false;
+        this.highlightedIndex = Math.min(this.highlightedIndex + 1, this.history.length - 1);
+        this._updateHighlight();
+        return true;
+    }
+
+    /** Move highlight up; returns true if the history dropdown consumed the event. */
+    navigateUp(): boolean {
+        if (!this.isVisible()) return false;
+        if (this.highlightedIndex <= 0) {
+            this.highlightedIndex = -1;
+            this._updateHighlight();
+            return false; // let the caller handle further up-arrows
+        }
+        this.highlightedIndex--;
+        this._updateHighlight();
+        return true;
+    }
+
+    /** If an item is highlighted, select it and return true; otherwise return false. */
+    confirmHighlighted(): boolean {
+        if (!this.isVisible() || this.highlightedIndex < 0) return false;
+        const query = this.history[this.highlightedIndex];
+        if (query === undefined) return false;
+        this.searchInputEl.value = query;
+        this.hide();
+        this.onSelect(query);
+        return true;
+    }
+
+    private _render(): void {
         this.containerEl.innerHTML =
             `<div class="history-header">Recent</div>` +
             this.history
@@ -44,7 +95,6 @@ export class SearchHistory {
             `
                 )
                 .join('');
-        this.containerEl.classList.remove('hidden');
 
         this.containerEl.querySelectorAll<HTMLElement>('.history-item').forEach((item) => {
             item.addEventListener('mousedown', (e) => {
@@ -66,12 +116,15 @@ export class SearchHistory {
                 this.onSelect(this.searchInputEl.value);
             });
         });
-
-        this.searchInputEl.setAttribute('aria-expanded', 'true');
     }
 
-    hide(): void {
-        this.containerEl.classList.add('hidden');
-        this.searchInputEl.setAttribute('aria-expanded', 'false');
+    private _updateHighlight(): void {
+        this.containerEl.querySelectorAll<HTMLElement>('.history-item').forEach((item, i) => {
+            item.classList.toggle('history-item--active', i === this.highlightedIndex);
+        });
+        if (this.highlightedIndex >= 0) {
+            const items = this.containerEl.querySelectorAll<HTMLElement>('.history-item');
+            items[this.highlightedIndex]?.scrollIntoView({ block: 'nearest' });
+        }
     }
 }

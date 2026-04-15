@@ -13,7 +13,7 @@ export class Toast {
         this.toastEl = toastEl;
     }
 
-    show(message: string, _detail = '', type: ToastType = 'info'): void {
+    show(message: string, detail = '', type: ToastType = 'info'): void {
         const icons: Record<ToastType, string> = {
             success: '✓',
             error: '✕',
@@ -21,9 +21,11 @@ export class Toast {
             info: '•',
         };
 
+        const detailHtml = detail ? `<span class="toast-detail">${escapeHtml(detail)}</span>` : '';
+
         this.brandEl.classList.add('hidden-by-toast');
         this.toastEl.className = `toast toast--${type}`;
-        this.toastEl.innerHTML = `<span class="toast-icon">${icons[type]}</span><span>${escapeHtml(message)}</span>`;
+        this.toastEl.innerHTML = `<span class="toast-icon">${icons[type]}</span><span class="toast-body"><span class="toast-message">${escapeHtml(message)}</span>${detailHtml}</span>`;
         this.toastEl.classList.add('visible');
 
         this.hovered = false;

@@ -281,7 +281,8 @@ func (idx *FileIndex) manualIndex(ctx context.Context) {
 }
 
 // SearchFiles performs fuzzy matching against the local index filename.
-func (idx *FileIndex) SearchFiles(query string) []FileEntry {
+// usageScores is an optional map of file path → usage score; pass nil for no boosting.
+func (idx *FileIndex) SearchFiles(query string, usageScores map[string]int) []FileEntry {
 	if query == "" {
 		return nil
 	}
@@ -291,8 +292,11 @@ func (idx *FileIndex) SearchFiles(query string) []FileEntry {
 	allFiles := idx.files
 	idx.mu.RUnlock()
 
-	emptyScores := make([]int, len(names))
-	matches := search.Fuzzy(strings.ToLower(query), names, emptyScores)
+	scores := make([]int, len(allFiles))
+	for i, f := range allFiles {
+		scores[i] = usageScores[f.Path]
+	}
+	matches := search.Fuzzy(strings.ToLower(query), names, scores)
 
 	var results []FileEntry
 	for _, m := range matches {
@@ -306,7 +310,8 @@ func (idx *FileIndex) SearchFiles(query string) []FileEntry {
 }
 
 // SearchDirs performs fuzzy matching against the local index directory names.
-func (idx *FileIndex) SearchDirs(query string) []FileEntry {
+// usageScores is an optional map of dir path → usage score; pass nil for no boosting.
+func (idx *FileIndex) SearchDirs(query string, usageScores map[string]int) []FileEntry {
 	if query == "" {
 		return nil
 	}
@@ -316,8 +321,11 @@ func (idx *FileIndex) SearchDirs(query string) []FileEntry {
 	allDirs := idx.dirs
 	idx.mu.RUnlock()
 
-	emptyScores := make([]int, len(names))
-	matches := search.Fuzzy(strings.ToLower(query), names, emptyScores)
+	scores := make([]int, len(allDirs))
+	for i, d := range allDirs {
+		scores[i] = usageScores[d.Path]
+	}
+	matches := search.Fuzzy(strings.ToLower(query), names, scores)
 
 	var results []FileEntry
 	for _, m := range matches {

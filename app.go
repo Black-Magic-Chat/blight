@@ -81,6 +81,11 @@ type BlightConfig struct {
 	// File index behaviour
 	DisableFolderIndex bool `json:"disableFolderIndex,omitempty"` // exclude folders from search results, default false
 
+	// Web search
+	// URL template for web searches; %s is replaced with the URL-encoded query.
+	// Default: https://www.google.com/search?q=%s
+	SearchEngineURL string `json:"searchEngineURL,omitempty"`
+
 	// User-defined aliases: trigger → expansion (URL or text snippet)
 	Aliases map[string]string `json:"aliases,omitempty"`
 	// IDs of pinned items — shown first in spotlight view and boosted in search
@@ -659,7 +664,11 @@ func (a *App) Execute(id string) string {
 
 	if strings.HasPrefix(id, "web-search:") {
 		query := strings.TrimPrefix(id, "web-search:")
-		searchURL := "https://www.google.com/search?q=" + url.QueryEscape(query)
+		tmpl := a.config.SearchEngineURL
+		if tmpl == "" {
+			tmpl = "https://www.google.com/search?q=%s"
+		}
+		searchURL := strings.ReplaceAll(tmpl, "%s", url.QueryEscape(query))
 		runtime.BrowserOpenURL(a.ctx, searchURL)
 		runtime.WindowHide(a.ctx)
 		a.visible.Store(false)
@@ -715,6 +724,7 @@ func (a *App) Execute(id string) string {
 
 	if strings.HasPrefix(id, "file-open:") {
 		filePath := strings.TrimPrefix(id, "file-open:")
+		a.usage.Record("file-open:" + filePath)
 		shellOpen(filePath)
 		runtime.WindowHide(a.ctx)
 		a.visible.Store(false)
@@ -729,6 +739,7 @@ func (a *App) Execute(id string) string {
 
 	if strings.HasPrefix(id, "dir-open:") {
 		dirPath := strings.TrimPrefix(id, "dir-open:")
+		a.usage.Record("dir-open:" + dirPath)
 		shellOpen(dirPath)
 		runtime.WindowHide(a.ctx)
 		a.visible.Store(false)
@@ -758,6 +769,26 @@ func icon(winGlyph, fallback string) string {
 	return fallback
 }
 
+// revealLabel returns the platform-appropriate label for the "show in file manager" action.
+func revealLabel() string {
+	switch goruntime.GOOS {
+	case "windows":
+		return "Show in Explorer"
+	case "darwin":
+		return "Reveal in Finder"
+	default:
+		return "Show in Files"
+	}
+}
+
+// elevateLabel returns the platform-appropriate label for the "run with elevated privileges" action.
+func elevateLabel() string {
+	if goruntime.GOOS == "windows" {
+		return "Run as Administrator"
+	}
+	return "Run as Root"
+}
+
 func (a *App) GetContextActions(id string) []ContextAction {
 	switch {
 	case strings.HasPrefix(id, "dir-open:"):
@@ -769,7 +800,7 @@ func (a *App) GetContextActions(id string) []ContextAction {
 	case strings.HasPrefix(id, "file-open:"):
 		return []ContextAction{
 			{ID: "open", Label: "Open", Icon: icon("\uE768", "▶")},
-			{ID: "explorer", Label: "Show in Explorer", Icon: icon("\uE8B7", "📂")},
+			{ID: "explorer", Label: revealLabel(), Icon: icon("\uE8B7", "📂")},
 			{ID: "copy-path", Label: "Copy Path", Icon: icon("\uE8C8", "📋")},
 			{ID: "copy-name", Label: "Copy Name", Icon: icon("\uE70F", "📝")},
 		}
@@ -803,8 +834,8 @@ func (a *App) GetContextActions(id string) []ContextAction {
 		}
 		return []ContextAction{
 			{ID: "open", Label: "Open", Icon: icon("\uE768", "▶")},
-			{ID: "admin", Label: "Run as Administrator", Icon: icon("\uE7EF", "🛡️")},
-			{ID: "explorer", Label: "Show in Explorer", Icon: icon("\uE8B7", "📂")},
+			{ID: "admin", Label: elevateLabel(), Icon: icon("\uE7EF", "🛡️")},
+			{ID: "explorer", Label: revealLabel(), Icon: icon("\uE8B7", "📂")},
 			{ID: "copy-path", Label: "Copy Path", Icon: icon("\uE8C8", "📋")},
 			{ID: "pin", Label: pinLabel, Icon: pinIcon},
 		}
@@ -1094,7 +1125,15 @@ func (a *App) searchFiles(query string) []SearchResult {
 		return nil
 	}
 
-	fileResults := a.fileIdx.SearchFiles(query)
+	allScores := a.usage.AllScores()
+	fileScores := make(map[string]int, len(allScores))
+	for k, v := range allScores {
+		if strings.HasPrefix(k, "file-open:") {
+			fileScores[strings.TrimPrefix(k, "file-open:")] = v
+		}
+	}
+
+	fileResults := a.fileIdx.SearchFiles(query, fileScores)
 	limit := a.maxResults()
 	if len(fileResults) > limit {
 		fileResults = fileResults[:limit]
@@ -1125,7 +1164,15 @@ func (a *App) searchDirs(query string) []SearchResult {
 		return nil
 	}
 
-	dirResults := a.fileIdx.SearchDirs(query)
+	allScores := a.usage.AllScores()
+	dirScores := make(map[string]int, len(allScores))
+	for k, v := range allScores {
+		if strings.HasPrefix(k, "dir-open:") {
+			dirScores[strings.TrimPrefix(k, "dir-open:")] = v
+		}
+	}
+
+	dirResults := a.fileIdx.SearchDirs(query, dirScores)
 	limit := a.maxResults() / 2
 	if limit < 3 {
 		limit = 3

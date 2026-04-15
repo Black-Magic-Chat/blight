@@ -60,6 +60,25 @@ func (t *UsageTracker) Score(id string) int {
 	return int(float64(e.Count)*recency*100) + 1
 }
 
+// AllScores returns a snapshot of all scored entries as a map of id → score.
+// Only entries with a positive score are included.
+func (t *UsageTracker) AllScores() map[string]int {
+	t.mu.RLock()
+	keys := make([]string, 0, len(t.entries))
+	for k := range t.entries {
+		keys = append(keys, k)
+	}
+	t.mu.RUnlock()
+
+	out := make(map[string]int, len(keys))
+	for _, k := range keys {
+		if s := t.Score(k); s > 0 {
+			out[k] = s
+		}
+	}
+	return out
+}
+
 func (t *UsageTracker) load() {
 	data, err := os.ReadFile(t.path)
 	if err != nil {

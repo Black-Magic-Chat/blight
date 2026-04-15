@@ -188,8 +188,7 @@ class Blight {
         const settingsMode = await IsSettingsMode();
         if (settingsMode) {
             this.settingsMode = true;
-            // Patch settings module with settingsMode=true
-            (this.settings as any).deps.settingsMode = true;
+            this.settings.setSettingsMode(true);
             document.body.classList.add('settings-only');
             this.settings.bind();
             this.settings.open();
@@ -344,14 +343,19 @@ class Blight {
             switch (e.key) {
                 case 'ArrowDown':
                     e.preventDefault();
-                    this.moveSelection(1);
+                    if (!this.searchHistory.navigateDown()) {
+                        this.moveSelection(1);
+                    }
                     break;
                 case 'ArrowUp':
                     e.preventDefault();
-                    this.moveSelection(-1);
+                    if (!this.searchHistory.navigateUp()) {
+                        this.moveSelection(-1);
+                    }
                     break;
                 case 'Enter':
                     e.preventDefault();
+                    if (this.searchHistory.confirmHighlighted()) break;
                     if (e.ctrlKey) this.executeSecondaryAction();
                     else this.executeSelected();
                     break;
@@ -556,6 +560,12 @@ class Blight {
         }
 
         const displayResults = filtered.length > 0 ? filtered : this.results;
+
+        // Clamp selectedIndex so it never points past the end of the visible list.
+        if (this.selectedIndex >= displayResults.length) {
+            this.selectedIndex = 0;
+        }
+
         let html = '';
         let lastCategory = '';
 
