@@ -2109,6 +2109,10 @@ html.no-animations *::after {
 
 .toast-icon { font-size: 11px; flex-shrink: 0; }
 
+.toast-body { display: flex; flex-direction: column; min-width: 0; }
+.toast-message { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.toast-detail { font-size: 10px; opacity: 0.65; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+
 .toast--success { color: #4ade80; }
 .toast--error   { color: #f87171; }
 .toast--warning { color: #fbbf24; }
@@ -2230,10 +2234,13 @@ html.no-animations *::after {
     transition: background var(--transition-fast);
 }
 
-.history-item:hover {
+.history-item:hover,
+.history-item--active {
     background: var(--bg-hover);
     color: var(--text-primary);
 }
+
+.history-item--active .history-item-remove { opacity: 1; }
 
 .history-item-icon {
     font-size: 11px;
