@@ -53,6 +53,10 @@ export class Settings {
         this.deps = deps;
     }
 
+    setSettingsMode(value: boolean): void {
+        this.deps.settingsMode = value;
+    }
+
     get isOpen(): boolean {
         return !this.panelEl.classList.contains('hidden');
     }
@@ -146,6 +150,7 @@ export class Settings {
             // Aliases tab
             this._loadAliasesTab();
         } catch (e) {
+            // eslint-disable-next-line no-console
             console.error('Failed to load settings:', e);
         }
     }

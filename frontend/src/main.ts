@@ -188,8 +188,7 @@ class Blight {
         const settingsMode = await IsSettingsMode();
         if (settingsMode) {
             this.settingsMode = true;
-            // Patch settings module with settingsMode=true
-            (this.settings as any).deps.settingsMode = true;
+            this.settings.setSettingsMode(true);
             document.body.classList.add('settings-only');
             this.settings.bind();
             this.settings.open();
