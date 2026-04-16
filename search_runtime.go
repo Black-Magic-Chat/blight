@@ -41,8 +41,7 @@ type rankedCandidate struct {
 func newSearchRequest(query string) searchRequest {
 	trimmedQuery := strings.TrimSpace(query)
 	request := searchRequest{
-		RawQuery:        trimmedQuery,
-		NormalizedQuery: strings.ToLower(trimmedQuery),
+		RawQuery: trimmedQuery,
 	}
 
 	commandExpression := trimmedQuery
@@ -53,6 +52,12 @@ func newSearchRequest(query string) searchRequest {
 	} else {
 		request.CommandExpression = trimmedQuery
 	}
+
+	normalizedQuery := trimmedQuery
+	if request.CommandMode {
+		normalizedQuery = commandExpression
+	}
+	request.NormalizedQuery = strings.ToLower(strings.TrimSpace(normalizedQuery))
 
 	if commandExpression == "" {
 		return request
@@ -71,14 +76,23 @@ func newSearchRequest(query string) searchRequest {
 	return request
 }
 
-func providerCaps() map[string]int {
+func providerCaps(maxResults int) map[string]int {
+	if maxResults < 1 {
+		maxResults = 1
+	}
+
+	folderCap := (maxResults + 1) / 2
+	if folderCap < 1 {
+		folderCap = 1
+	}
+
 	return map[string]int{
-		resultKindCommand:   6,
-		resultKindApp:       8,
-		resultKindFile:      6,
-		resultKindFolder:    4,
-		resultKindClipboard: 6,
-		resultKindSystem:    5,
+		resultKindCommand:   min(6, maxResults),
+		resultKindApp:       maxResults,
+		resultKindFile:      min(6, maxResults),
+		resultKindFolder:    min(4, folderCap),
+		resultKindClipboard: min(6, maxResults),
+		resultKindSystem:    min(5, maxResults),
 		resultKindWeb:       1,
 		resultKindCalc:      1,
 	}
@@ -263,7 +277,7 @@ func (app *App) searchAll(query string) []SearchResult {
 		candidates = append(candidates, app.urlProviderCandidates(request)...)
 	}
 
-	results := applyCapsAndSort(candidates)
+	results := applyCapsAndSort(candidates, app.maxResults())
 	if request.CommandMode {
 		return results
 	}
@@ -294,7 +308,7 @@ func (app *App) wrapResults(results []SearchResult, categoryKind string) []ranke
 	return wrappedResults
 }
 
-func applyCapsAndSort(candidates []rankedCandidate) []SearchResult {
+func applyCapsAndSort(candidates []rankedCandidate, maxResults int) []SearchResult {
 	sort.SliceStable(candidates, func(leftIndex, rightIndex int) bool {
 		leftCandidate := candidates[leftIndex]
 		rightCandidate := candidates[rightIndex]
@@ -309,7 +323,7 @@ func applyCapsAndSort(candidates []rankedCandidate) []SearchResult {
 		return strings.ToLower(leftCandidate.Result.Title) < strings.ToLower(rightCandidate.Result.Title)
 	})
 
-	categoryCaps := providerCaps()
+	categoryCaps := providerCaps(maxResults)
 	categoryCounts := make(map[string]int)
 	results := make([]SearchResult, 0, len(candidates))
 
@@ -327,7 +341,7 @@ func applyCapsAndSort(candidates []rankedCandidate) []SearchResult {
 
 func (app *App) commandCandidates(request searchRequest) []SearchResult {
 	candidates := app.commandProviderCandidates(request)
-	results := applyCapsAndSort(candidates)
+	results := applyCapsAndSort(candidates, app.maxResults())
 	return results
 }
 
