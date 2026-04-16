@@ -15,6 +15,7 @@ import {
     CloseSettings,
     ExportSettings,
     ImportSettings,
+    GetCommands,
     GetAliases,
     SaveAlias,
     DeleteAlias,
@@ -167,6 +168,29 @@ export class Settings {
         }
         this.panelEl.classList.add('hidden');
         this.deps.onClose();
+    }
+
+    async openCommandEditor(commandId?: string): Promise<void> {
+        await this.open();
+        this.activateTab('commands');
+        if (!commandId) return;
+
+        try {
+            const commands = await GetCommands();
+            const command = commands.find((item) => item.id === commandId);
+            if (!command) return;
+
+            const triggerInput = document.getElementById(
+                'alias-trigger-input'
+            ) as HTMLInputElement | null;
+            const expansionInput = document.getElementById(
+                'alias-expansion-input'
+            ) as HTMLInputElement | null;
+            if (triggerInput) triggerInput.value = command.keyword || '';
+            if (expansionInput) expansionInput.value = command.template || '';
+        } catch {
+            /* non-critical */
+        }
     }
 
     activateTab(name: string): void {

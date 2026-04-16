@@ -36,18 +36,25 @@ type UpdateInfo struct {
 }
 
 type SearchResult struct {
-	ID       string `json:"id"`
-	Title    string `json:"title"`
-	Subtitle string `json:"subtitle"`
-	Icon     string `json:"icon"`
-	Category string `json:"category"`
-	Path     string `json:"path"`
+	ID                   string `json:"id"`
+	Title                string `json:"title"`
+	Subtitle             string `json:"subtitle"`
+	Icon                 string `json:"icon"`
+	Category             string `json:"category"`
+	Path                 string `json:"path"`
+	Kind                 string `json:"kind"`
+	Score                int    `json:"score"`
+	PrimaryActionLabel   string `json:"primaryActionLabel"`
+	SecondaryActionLabel string `json:"secondaryActionLabel"`
+	SupportsActions      bool   `json:"supportsActions"`
 }
 
 type ContextAction struct {
-	ID    string `json:"id"`
-	Label string `json:"label"`
-	Icon  string `json:"icon"`
+	ID          string `json:"id"`
+	Label       string `json:"label"`
+	Icon        string `json:"icon"`
+	Shortcut    string `json:"shortcut"`
+	Destructive bool   `json:"destructive"`
 }
 
 type BlightConfig struct {
@@ -84,7 +91,8 @@ type BlightConfig struct {
 	// Web search
 	// URL template for web searches; %s is replaced with the URL-encoded query.
 	// Default: https://www.google.com/search?q=%s
-	SearchEngineURL string `json:"searchEngineURL,omitempty"`
+	SearchEngineURL string              `json:"searchEngineURL,omitempty"`
+	Commands        []CommandDefinition `json:"commands,omitempty"`
 
 	// User-defined aliases: trigger → expansion (URL or text snippet)
 	Aliases map[string]string `json:"aliases,omitempty"`
@@ -373,6 +381,7 @@ func defaultConfig() BlightConfig {
 		FooterHints:         "always",
 		StartOnStartup:      false,
 		HideNotifyIcon:      false,
+		SearchEngineURL:     "https://www.google.com/search?q=%s",
 	}
 }
 
@@ -409,6 +418,13 @@ func (a *App) loadConfig() {
 	}
 	if a.config.FooterHints == "" {
 		a.config.FooterHints = "always"
+	}
+	if a.config.SearchEngineURL == "" {
+		a.config.SearchEngineURL = "https://www.google.com/search?q=%s"
+	}
+
+	if a.migrateAliasesToCommands() {
+		_ = a.saveConfig()
 	}
 }
 
@@ -497,6 +513,9 @@ func (a *App) SaveSettings(cfg BlightConfig) error {
 	if cfg.FooterHints != "" {
 		a.config.FooterHints = cfg.FooterHints
 	}
+	if cfg.SearchEngineURL != "" {
+		a.config.SearchEngineURL = cfg.SearchEngineURL
+	}
 	if cfg.PlaceholderText != "" {
 		a.config.PlaceholderText = cfg.PlaceholderText
 	}
@@ -509,6 +528,9 @@ func (a *App) SaveSettings(cfg BlightConfig) error {
 
 	if cfg.Aliases != nil {
 		a.config.Aliases = cfg.Aliases
+	}
+	if cfg.Commands != nil {
+		a.config.Commands = cfg.Commands
 	}
 	if cfg.PinnedItems != nil {
 		a.config.PinnedItems = cfg.PinnedItems
@@ -556,6 +578,10 @@ func (a *App) OpenFolderPicker() string {
 }
 
 func (a *App) Search(query string) []SearchResult {
+	results := a.searchAll(query)
+	debug.Get().Debug("search", map[string]interface{}{"query": query, "results": len(results)})
+	return results
+	/*
 	log := debug.Get()
 	if query == "" {
 		return a.getDefaultResults()
@@ -657,9 +683,12 @@ func (a *App) Search(query string) []SearchResult {
 
 	log.Debug("search", map[string]interface{}{"query": query, "results": len(results)})
 	return results
+	*/
 }
 
 func (a *App) Execute(id string) string {
+	return a.executeResult(id)
+	/*
 	debug.Get().Info("execute", map[string]interface{}{"id": id})
 
 	if strings.HasPrefix(id, "web-search:") {
@@ -758,6 +787,7 @@ func (a *App) Execute(id string) string {
 		}
 	}
 	return "not found"
+	*/
 }
 
 // icon returns a Segoe MDL2/Fluent glyph on Windows and a plain emoji on other platforms.
@@ -790,6 +820,8 @@ func elevateLabel() string {
 }
 
 func (a *App) GetContextActions(id string) []ContextAction {
+	return a.contextActionsFor(id)
+	/*
 	switch {
 	case strings.HasPrefix(id, "dir-open:"):
 		return []ContextAction{
@@ -840,9 +872,12 @@ func (a *App) GetContextActions(id string) []ContextAction {
 			{ID: "pin", Label: pinLabel, Icon: pinIcon},
 		}
 	}
+	*/
 }
 
 func (a *App) ExecuteContextAction(resultID string, actionID string) string {
+	return a.performContextAction(resultID, actionID)
+	/*
 	// Aliases
 	if strings.HasPrefix(resultID, "alias:") {
 		trigger := strings.TrimPrefix(resultID, "alias:")
@@ -994,6 +1029,7 @@ func (a *App) ExecuteContextAction(resultID string, actionID string) string {
 	}
 
 	return "unknown action"
+	*/
 }
 
 func (a *App) GetIcon(path string) string {
@@ -1031,52 +1067,63 @@ func (a *App) ExportSettings() string {
 
 // ImportSettings replaces the current config with one parsed from a JSON string.
 func (a *App) ImportSettings(data string) error {
-	var cfg BlightConfig
-	if err := json.Unmarshal([]byte(data), &cfg); err != nil {
+	if err := json.Unmarshal([]byte(data), &BlightConfig{}); err != nil {
 		return fmt.Errorf("invalid settings JSON: %w", err)
 	}
-	a.config = cfg
+	a.config = defaultConfig()
+	if err := json.Unmarshal([]byte(data), &a.config); err != nil {
+		return fmt.Errorf("invalid settings JSON: %w", err)
+	}
+	if a.config.SearchEngineURL == "" {
+		a.config.SearchEngineURL = "https://www.google.com/search?q=%s"
+	}
+	a.migrateAliasesToCommands()
 	return a.saveConfig()
 }
 
 // GetUsageScores returns a map of item ID → decayed usage score for items with
 // at least one recorded use. Used by the frontend to show frequency indicators.
 func (a *App) GetUsageScores() map[string]int {
-	scores := make(map[string]int)
-	for _, app := range a.scanner.Apps() {
-		if s := a.usage.Score(app.Name); s > 0 {
-			scores[app.Name] = s
-		}
-	}
-	return scores
+	return a.usage.AllScores()
 }
 
 // GetAliases returns the current alias map (trigger → expansion).
 func (a *App) GetAliases() map[string]string {
-	if a.config.Aliases == nil {
-		return map[string]string{}
+	aliases := make(map[string]string)
+	for _, commandDefinition := range a.config.Commands {
+		if commandDefinition.RequiresArgument {
+			continue
+		}
+		if commandDefinition.ActionType != "open_url" && commandDefinition.ActionType != "copy_text" {
+			continue
+		}
+		aliases[commandDefinition.Keyword] = commandDefinition.Template
 	}
-	return a.config.Aliases
+	return aliases
 }
 
 // SaveAlias creates or updates an alias.
 func (a *App) SaveAlias(trigger, expansion string) error {
-	trigger = strings.TrimSpace(trigger)
+	trigger = strings.ToLower(strings.TrimSpace(trigger))
 	expansion = strings.TrimSpace(expansion)
 	if trigger == "" || expansion == "" {
 		return fmt.Errorf("trigger and expansion must not be empty")
 	}
-	if a.config.Aliases == nil {
-		a.config.Aliases = make(map[string]string)
+	aliasCommand := aliasToCommand(trigger, expansion)
+	if existingCommand, index, found := a.findUserCommand(aliasCommand.ID); found {
+		aliasCommand.Pinned = existingCommand.Pinned
+		a.config.Commands[index] = aliasCommand
+	} else {
+		a.config.Commands = append(a.config.Commands, aliasCommand)
 	}
-	a.config.Aliases[strings.ToLower(trigger)] = expansion
 	return a.saveConfig()
 }
 
 // DeleteAlias removes an alias by trigger.
 func (a *App) DeleteAlias(trigger string) error {
-	if a.config.Aliases != nil {
-		delete(a.config.Aliases, trigger)
+	aliasID := "legacy-" + strings.ToLower(strings.TrimSpace(trigger))
+	if _, index, found := a.findUserCommand(aliasID); found {
+		a.config.Commands = append(a.config.Commands[:index], a.config.Commands[index+1:]...)
 	}
 	return a.saveConfig()
 }
@@ -1084,14 +1131,15 @@ func (a *App) DeleteAlias(trigger string) error {
 // TogglePinned pins an item if not already pinned, or unpins it if it is.
 // Returns true if the item is now pinned, false if it was unpinned.
 func (a *App) TogglePinned(id string) bool {
-	for i, p := range a.config.PinnedItems {
-		if p == id {
-			a.config.PinnedItems = append(a.config.PinnedItems[:i], a.config.PinnedItems[i+1:]...)
+	canonicalID := canonicalPinnedID(id)
+	for index, pinnedID := range a.config.PinnedItems {
+		if pinnedID == canonicalID {
+			a.config.PinnedItems = append(a.config.PinnedItems[:index], a.config.PinnedItems[index+1:]...)
 			_ = a.saveConfig()
 			return false
 		}
 	}
-	a.config.PinnedItems = append(a.config.PinnedItems, id)
+	a.config.PinnedItems = append(a.config.PinnedItems, canonicalID)
 	_ = a.saveConfig()
 	return true
 }
