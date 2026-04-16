@@ -638,7 +638,9 @@ class Blight {
 
             const titleHtml = highlightMatch(
                 result.title,
-                this.currentQuery.startsWith('>') ? this.currentQuery.slice(1).trim() : this.currentQuery
+                this.currentQuery.startsWith('>')
+                    ? this.currentQuery.slice(1).trim()
+                    : this.currentQuery
             );
 
             const freq = this.usageScores.get(result.id) ?? 0;
@@ -909,7 +911,8 @@ class Blight {
         }
         primaryHint.innerHTML = `<kbd>↵</kbd> ${escapeHtml(result.primaryActionLabel || 'Open')}`;
         actionsHint.innerHTML = '<kbd>Tab</kbd> Actions';
-        const secondaryLabel = result.secondaryActionLabel || this.getSecondaryActionLabel(result.id);
+        const secondaryLabel =
+            result.secondaryActionLabel || this.getSecondaryActionLabel(result.id);
         const secondaryId = this.getSecondaryActionId(result.id);
         const hasSecondary = secondaryId !== null && secondaryId !== 'explorer';
         if (hasSecondary) {
