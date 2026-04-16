@@ -71,6 +71,7 @@ class Blight {
     // Window state
     private lastShownAt = 0;
     private isHiding = false;
+    private focusRequestId = 0;
 
     // Icon cache
     private iconCache: Map<string, string> = new Map();
@@ -120,7 +121,7 @@ class Blight {
         this.settings = new Settings(this.settingsPanelEl, {
             showToast: (msg, detail?, type?) => this.showToast(msg, detail, type),
             applyRuntimeSettings: (cfg) => this._applyRuntimeSettings(cfg),
-            onClose: () => this.searchInput.focus(),
+            onClose: () => this.focusSearchInput(),
             settingsMode: false, // updated after init
             getLastUpdateCheck: () => this.lastUpdateCheck,
             setLastUpdateCheck: (t) => {
@@ -217,7 +218,7 @@ class Blight {
     showLauncher(): void {
         this.splashEl.classList.add('hidden');
         this.launcherEl.classList.remove('hidden');
-        setTimeout(() => this.searchInput.focus(), 50);
+        this.focusSearchInput();
         this.bindEvents();
         this.listenIndexStatus();
         this.settings.bind();
@@ -315,6 +316,36 @@ class Blight {
         const visible =
             this.footerHintsMode === 'always' || (this.footerHintsMode === 'on-search' && inSearch);
         actions.classList.toggle('footer-hints-hidden', !visible);
+    }
+
+    private focusSearchInput(selectText = false): void {
+        const requestId = ++this.focusRequestId;
+
+        const attemptFocus = (attemptsLeft: number): void => {
+            if (requestId !== this.focusRequestId) return;
+            if (this.launcherEl.classList.contains('hidden')) return;
+            if (document.hidden) {
+                if (attemptsLeft > 0) {
+                    window.setTimeout(() => attemptFocus(attemptsLeft - 1), 40);
+                }
+                return;
+            }
+
+            this.searchInput.focus({ preventScroll: true });
+            if (selectText) {
+                this.searchInput.select();
+            }
+
+            if (document.activeElement === this.searchInput || attemptsLeft <= 0) {
+                return;
+            }
+
+            window.requestAnimationFrame(() => {
+                window.setTimeout(() => attemptFocus(attemptsLeft - 1), 30);
+            });
+        };
+
+        attemptFocus(8);
     }
 
     // --- Events ---
@@ -446,10 +477,12 @@ class Blight {
                 this.filterPills.clearFilter();
                 this.filterPills.hide();
             }
-            setTimeout(() => {
-                this.searchInput.focus();
-                this.searchInput.select();
-            }, 30);
+            this.focusSearchInput(true);
+        });
+
+        window.addEventListener('focus', () => {
+            if (this.settings.isOpen) return;
+            this.focusSearchInput(this.visibleQuery().length > 0);
         });
 
         window.addEventListener('blur', () => {
@@ -462,11 +495,15 @@ class Blight {
         EventsOn('openSettings', () => this.settings.open());
     }
 
+    private visibleQuery(): string {
+        return this.searchInput.value.trim();
+    }
+
     // --- Search ---
 
     onSearchInput(): void {
         clearTimeout(this.debounceTimer ?? undefined);
-        const query = this.searchInput.value.trim();
+        const query = this.visibleQuery();
         if (!query) {
             this.setLoading(false);
             this.loadDefaultResults();
