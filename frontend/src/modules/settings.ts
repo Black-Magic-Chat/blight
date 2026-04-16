@@ -16,8 +16,6 @@ import {
     ExportSettings,
     ImportSettings,
     GetCommands,
-    SaveCommand,
-    DeleteCommand,
     OpenURL,
 } from '../../wailsjs/go/main/App';
 import { marked, Renderer } from 'marked';
