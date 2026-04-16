@@ -218,7 +218,7 @@ class Blight {
     showLauncher(): void {
         this.splashEl.classList.add('hidden');
         this.launcherEl.classList.remove('hidden');
-        setTimeout(() => this.focusSearchInput(), 50);
+        this.focusSearchInput();
         this.bindEvents();
         this.listenIndexStatus();
         this.settings.bind();
@@ -497,7 +497,12 @@ class Blight {
                 this.filterPills.clearFilter();
                 this.filterPills.hide();
             }
-            setTimeout(() => this.focusSearchInput(true), 30);
+            this.focusSearchInput(true);
+        });
+
+        window.addEventListener('focus', () => {
+            if (this.settings.isOpen) return;
+            this.focusSearchInput(this.visibleQuery().length > 0);
         });
 
         window.addEventListener('blur', () => {
@@ -508,6 +513,10 @@ class Blight {
         });
 
         EventsOn('openSettings', () => this.settings.open());
+    }
+
+    private visibleQuery(): string {
+        return this.searchInput.value.trim();
     }
 
     // --- Search ---
