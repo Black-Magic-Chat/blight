@@ -305,7 +305,7 @@ class Blight {
         applyTheme(cfg.theme || 'dark');
 
         this.footerHintsMode = cfg.footerHints || 'always';
-        const inSearch = !this.launcherEl.classList.contains('spotlight-mode');
+        const inSearch = !this.launcherEl.classList.contains('home-mode');
         this._applyFooterHintsVisibility(inSearch);
     }
 

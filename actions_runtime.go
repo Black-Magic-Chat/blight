@@ -9,6 +9,7 @@ import (
 
 	"blight/internal/apps"
 	"blight/internal/commands"
+	"blight/internal/debug"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )

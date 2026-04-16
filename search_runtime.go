@@ -164,15 +164,15 @@ func buildCommandResult(command CommandDefinition, argument string, category str
 
 func buildSystemResult(systemCommand commands.SystemCommand, score int) SearchResult {
 	return SearchResult{
-		ID:                   "sys-" + systemCommand.ID,
-		Title:                systemCommand.Name,
-		Subtitle:             systemCommand.Subtitle,
-		Icon:                 systemCommand.Icon,
-		Category:             "System",
-		Kind:                 resultKindSystem,
-		Score:                score,
-		PrimaryActionLabel:   "Run",
-		SupportsActions:      true,
+		ID:                 "sys-" + systemCommand.ID,
+		Title:              systemCommand.Name,
+		Subtitle:           systemCommand.Subtitle,
+		Icon:               systemCommand.Icon,
+		Category:           "System",
+		Kind:               resultKindSystem,
+		Score:              score,
+		PrimaryActionLabel: "Run",
+		SupportsActions:    true,
 	}
 }
 
