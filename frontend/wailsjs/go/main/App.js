@@ -134,6 +134,10 @@ export function ReindexFiles() {
   return window['go']['main']['App']['ReindexFiles']();
 }
 
+export function ResizeToContent(arg1) {
+  return window['go']['main']['App']['ResizeToContent'](arg1);
+}
+
 export function SaveAlias(arg1, arg2) {
   return window['go']['main']['App']['SaveAlias'](arg1, arg2);
 }
