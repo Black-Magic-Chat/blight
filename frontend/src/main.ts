@@ -584,7 +584,7 @@ class Blight {
     syncWindowHeight(): void {
         requestAnimationFrame(() => {
             const h = Math.ceil(this.launcherEl.getBoundingClientRect().height);
-            if (h > 0) void ResizeToContent(h);
+            if (h > 0 && typeof ResizeToContent === 'function') void ResizeToContent(h);
         });
     }
 
