@@ -69,6 +69,8 @@ export function RefreshApps():Promise<void>;
 
 export function ReindexFiles():Promise<void>;
 
+export function ResizeToContent(arg1:number):Promise<void>;
+
 export function SaveAlias(arg1:string,arg2:string):Promise<void>;
 
 export function SaveCommand(arg1:main.CommandDefinition):Promise<void>;

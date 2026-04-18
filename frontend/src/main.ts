@@ -12,6 +12,7 @@ import {
     GetConfig,
     GetVersion,
     GetUsageScores,
+    ResizeToContent,
 } from '../wailsjs/go/main/App';
 import {
     provideFluentDesignSystem,
@@ -569,11 +570,22 @@ class Blight {
             this.results = homeResults;
             this.searchHistory.hide();
             this.renderResults();
+        } else {
+            // No results yet — just ensure the window is compact
+            this.syncWindowHeight();
         }
     }
 
     setLoading(loading: boolean): void {
         document.getElementById('search-loader')?.classList.toggle('visible', loading);
+    }
+
+    /** Resize the OS window to match the launcher's natural content height. */
+    syncWindowHeight(): void {
+        requestAnimationFrame(() => {
+            const h = Math.ceil(this.launcherEl.getBoundingClientRect().height);
+            if (h > 0 && typeof ResizeToContent === 'function') void ResizeToContent(h);
+        });
     }
 
     // --- Results rendering ---
@@ -730,6 +742,7 @@ class Blight {
         this.updateFooterHints(this._displayResults[this.selectedIndex] ?? null);
         this._applyFooterHintsVisibility(true);
         this.systemNotifs.refresh();
+        this.syncWindowHeight();
     }
 
     // --- Navigation ---
