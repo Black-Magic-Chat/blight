@@ -316,6 +316,9 @@ func (a *App) OpenSettingsWindow() {
 	}
 }
 
+// spotlightHeight is the window height when no results are shown (search bar only).
+const spotlightHeight = 72
+
 func (a *App) ToggleWindow() {
 	if a.visible.Load() {
 		runtime.WindowHide(a.ctx)
@@ -323,6 +326,9 @@ func (a *App) ToggleWindow() {
 	} else {
 		a.loadConfig()
 		a.lastShownAt.Store(time.Now().UnixNano())
+		// Reset to compact height and re-centre so the search bar is always at
+		// a predictable screen position; results will grow downward from there.
+		a.resetWindowForShow()
 		runtime.WindowShow(a.ctx)
 		runtime.WindowSetAlwaysOnTop(a.ctx, true)
 		runtime.EventsEmit(a.ctx, "windowShown")
@@ -333,10 +339,35 @@ func (a *App) ToggleWindow() {
 func (a *App) ShowWindow() {
 	a.loadConfig()
 	a.lastShownAt.Store(time.Now().UnixNano())
+	a.resetWindowForShow()
 	runtime.WindowShow(a.ctx)
 	runtime.WindowSetAlwaysOnTop(a.ctx, true)
 	runtime.EventsEmit(a.ctx, "windowShown")
 	a.visible.Store(true)
+}
+
+// resetWindowForShow shrinks the window to the compact spotlight height and
+// centres it on screen so the search bar always appears at the same position.
+func (a *App) resetWindowForShow() {
+	w, _ := runtime.WindowGetSize(a.ctx)
+	runtime.WindowSetSize(a.ctx, w, spotlightHeight)
+	runtime.WindowCenter(a.ctx)
+}
+
+// ResizeToContent adjusts the window height to h pixels.
+// The top-left corner is NOT moved, so the window grows/shrinks from the
+// bottom — the search bar stays at the same screen position.
+// Called by the frontend after every render.
+func (a *App) ResizeToContent(h int) {
+	const minH, maxH = spotlightHeight, 680
+	if h < minH {
+		h = minH
+	}
+	if h > maxH {
+		h = maxH
+	}
+	w, _ := runtime.WindowGetSize(a.ctx)
+	runtime.WindowSetSize(a.ctx, w, h)
 }
 
 func (a *App) HideWindow() {
