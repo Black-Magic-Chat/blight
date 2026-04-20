@@ -834,7 +834,7 @@ class Blight {
         const list = this._displayResults.length > 0 ? this._displayResults : this.results;
         if (list.length === 0) return;
         if (this.selectedIndex >= list.length) return;
-        const result = list[this.selectedIndex]!
+        const result = list[this.selectedIndex]!;
 
         if (result.id.startsWith('calc-result:')) {
             await navigator.clipboard.writeText(result.title);
