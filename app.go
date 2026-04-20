@@ -104,19 +104,19 @@ type BlightConfig struct {
 }
 
 type App struct {
-	ctx            context.Context
-	config         BlightConfig
-	scanner        *apps.Scanner
-	usage          *search.UsageTracker
-	clipboard      *commands.ClipboardHistory
-	fileIdx        *files.FileIndex
-	hotkey         *hotkey.HotkeyManager
-	tray           *tray.TrayIcon
-	visible        atomic.Bool
-	lastShownAt    atomic.Int64
-	settingsOpen   atomic.Bool // prevents spawning multiple settings windows
-	version        string
-	settingsMode   bool
+	ctx          context.Context
+	config       BlightConfig
+	scanner      *apps.Scanner
+	usage        *search.UsageTracker
+	clipboard    *commands.ClipboardHistory
+	fileIdx      *files.FileIndex
+	hotkey       *hotkey.HotkeyManager
+	tray         *tray.TrayIcon
+	visible      atomic.Bool
+	lastShownAt  atomic.Int64
+	settingsOpen atomic.Bool // prevents spawning multiple settings windows
+	version      string
+	settingsMode bool
 }
 
 func NewApp(version string) *App {
