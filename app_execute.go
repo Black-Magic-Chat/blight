@@ -155,11 +155,11 @@ func (a *App) Execute(id string) string {
 			if app.Name == id {
 				a.usage.Record(id)
 				err := apps.Launch(app)
-				runtime.WindowHide(a.ctx)
-				a.visible.Store(false)
 				if err != nil {
 					return err.Error()
 				}
+				runtime.WindowHide(a.ctx)
+				a.visible.Store(false)
 				return "ok"
 			}
 		}
