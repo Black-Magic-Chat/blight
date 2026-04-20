@@ -58,6 +58,19 @@ func (s *Scanner) Names() []string {
 	return names
 }
 
+func (s *Scanner) Snapshot() ([]AppEntry, []string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	apps := make([]AppEntry, len(s.apps))
+	names := make([]string, len(s.apps))
+	for i, app := range s.apps {
+		apps[i] = app
+		names[i] = app.Name
+	}
+	return apps, names
+}
+
 func scanDesktopApps() []AppEntry {
 	var dirs []string
 	home, _ := os.UserHomeDir()

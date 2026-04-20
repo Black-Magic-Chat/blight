@@ -295,8 +295,7 @@ func (a *App) searchSystemCommandsScored(query string) []search.Scored[SearchRes
 }
 
 func (a *App) searchAppsScored(query string) []search.Scored[SearchResult] {
-	allApps := a.scanner.Apps()
-	names := a.scanner.Names()
+	allApps, names := a.scanner.Snapshot()
 	usageScores := make([]int, len(allApps))
 	for i, app := range allApps {
 		usageScores[i] = a.usage.Score(app.Name)
@@ -387,7 +386,7 @@ func (a *App) searchFilesScored(query string) []search.Scored[SearchResult] {
 }
 
 func (a *App) getDefaultResults() []SearchResult {
-	allApps := a.scanner.Apps()
+	allApps, names := a.scanner.Snapshot()
 	var results []SearchResult
 
 	pinnedSet := make(map[string]bool)
@@ -411,7 +410,6 @@ func (a *App) getDefaultResults() []SearchResult {
 		}
 	}
 
-	names := a.scanner.Names()
 	usageScores := make([]int, len(allApps))
 	for i, app := range allApps {
 		usageScores[i] = a.usage.Score(app.Name)
